@@ -5,7 +5,9 @@ const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
-    const { startDate = "2025-07-01", endDate = "2025-11-30" } = req.query;
+    const { startDate = "2025-07-01", endDate = "2025-11-30", classification } = req.query;
+
+    const categoryFilter = classification ? `AND t02.category = '${classification}'` : "";
 
     const sql = `
  WITH closing_inv AS (
@@ -18,9 +20,9 @@ router.get("/", async (req, res) => {
     inner JOIN frg_dist_metric_prod_mapping t02
         ON t01.item_code::text = t02.sap_mapping_code::text
     WHERE t01.data_flag = 'OPS'
-    AND t02.category = 'A'
-    AND t01.sale_trg_date >= '2021-06-30' -- this is the hard corded value 
-    AND t01.sale_trg_date <= '2026-02-28' --- use current date filter apply here 
+    ${categoryFilter}
+    AND t01.sale_trg_date >= '2021-06-30' -- this is the hard corded value
+    AND t01.sale_trg_date <= '2026-02-28' --- use current date filter apply here
 ),
 ibl_direct_target AS (
     SELECT
@@ -28,8 +30,8 @@ ibl_direct_target AS (
     FROM mv_target_sales_aggregate_25_26 t01
     inner JOIN frg_dist_metric_prod_mapping t02
         ON t01.item_code::text = t02.sap_mapping_code::text
-    WHERE t01.data_flag = 'OPS' --- hard coded 
-    AND t02.category = 'A' ----apply filter 
+    WHERE t01.data_flag = 'OPS'
+    ${categoryFilter}
     AND t01.sale_trg_date BETWEEN '2026-02-01' AND '2026-02-28' -- apply filter
 ),
 ibl_primary_target AS (
@@ -38,9 +40,9 @@ ibl_primary_target AS (
     FROM mv_target_sales_aggregate_25_26 t01
     inner JOIN frg_dist_metric_prod_mapping t02
         ON t01.item_code::text = t02.sap_mapping_code::text
-    WHERE t01.data_flag = 'SD' -- apply hardcoded 
-    AND t02.category = 'A' ---- apply filter 
-    AND t01.sale_trg_date BETWEEN '2026-02-01' AND '2026-02-28' --apply filter 
+    WHERE t01.data_flag = 'SD'
+    ${categoryFilter}
+    AND t01.sale_trg_date BETWEEN '2026-02-01' AND '2026-02-28' --apply filter
 ),
 days_calc AS (
     SELECT
