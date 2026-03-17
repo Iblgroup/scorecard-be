@@ -5,24 +5,13 @@ const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
-    const { startDate = "2025-07-01", endDate = "2025-11-30" } = req.query;
-
+    const { date = new Date().toISOString().slice(0, 10), category = 'A' } = req.query;
     const sql = `
-SELECT
-    sdvo.material_name,
-    SUM(sdvo.delivery_quantity ) AS total_delivery_qty,
-    SUM(sdvo.so_quantity )  AS total_order_qty,
-    ROUND(
-        SUM(sdvo.delivery_quantity)::numeric /
-        NULLIF(SUM(sdvo.so_quantity)::numeric, 0) * 100
-    , 2)    AS delivery_pct
-FROM sap_dispatch_vs_order sdvo
-GROUP BY sdvo.material_name
-ORDER BY sdvo.material_name;
+        select swd.material_description as "item desc" ,sum(swd.total_value) as "Wip_total" from sap_wip_data swd
+        group by material_description ;
     `;
-
     const results = await db.sequelize.query(sql, {
-      replacements: { startDate, endDate },
+      replacements: { date, category },
       type: db.sequelize.QueryTypes.SELECT,
     });
     console.log(`Fetched ${results.length} records from vw_invoice_productmap`);
