@@ -5,7 +5,7 @@ const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
-    const { startDate = "2025-07-01", endDate = "2025-11-30" } = req.query;
+    const { startDate = "2026-03-01", endDate = "2026-03-31", classification, sku } = req.query;
 
     const sql = `
       WITH closing_inv AS (
@@ -24,6 +24,8 @@ router.get("/", async (req, res) => {
           INNER JOIN locations l
               ON t01.branch_code::text = l.branch_code::text
           WHERE t01.data_flag = 'OPS'
+          ${classification ? `AND t02.category = :classification` : ""}
+          ${sku ? `AND t02.item_desc = :sku` : ""}
           AND t01.sale_trg_date >= '2021-06-30' --- its hardcoded
           AND t01.sale_trg_date <= '2026-02-28'--- apply filter
           GROUP BY t02.category, l.branch_code, l.branch_desc, t02.item_desc
@@ -41,8 +43,10 @@ router.get("/", async (req, res) => {
               ON t01.item_code::text = t02.sap_mapping_code::text
           INNER JOIN locations l
               ON t01.branch_code::text = l.branch_code::text
-          WHERE t01.sale_trg_date BETWEEN '2026-02-01' AND '2026-02-28'
+          WHERE t01.sale_trg_date BETWEEN :startDate AND :endDate
           AND t02.category <> ''
+          ${sku ? `AND t02.item_desc = :sku` : ""}
+          ${classification ? `AND t02.category = :classification` : ""}
           GROUP BY t02.category, l.branch_code, l.branch_desc, t02.item_desc
       ),
       days_calc AS (
@@ -91,8 +95,12 @@ router.get("/", async (req, res) => {
       ORDER BY category, item_desc;
     `;
 
+    const replacements = { startDate, endDate };
+    if (classification) replacements.classification = classification;
+    if (sku) replacements.sku = sku;
+
     const results = await db.sequelize.query(sql, {
-      replacements: { startDate, endDate },
+      replacements,
       type: db.sequelize.QueryTypes.SELECT,
     });
     console.log(`Fetched ${results.length} records from vw_invoice_productmap`);

@@ -5,7 +5,7 @@ const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
-    const { date = new Date().toISOString().slice(0, 10), category = 'A' } = req.query;
+    const { startDate = "2026-03-01", endDate = "2026-03-31", classification } = req.query;
     const sql = `
       WITH cover_days_per_sku AS (
           SELECT
@@ -31,7 +31,8 @@ router.get("/", async (req, res) => {
           INNER JOIN locations l
               ON t01.branch_code::text = l.branch_code::text
           WHERE t02.category IN ('A', 'B', 'C')
-          AND t01.sale_trg_date BETWEEN '2026-02-01' AND '2026-02-28'
+          ${classification ? `AND t02.category = :classification` : ""}
+          AND t01.sale_trg_date BETWEEN :startDate AND :endDate
           GROUP BY t02.category, t02.sap_mapping_code, l.branch_code, l.branch_desc, DATE_TRUNC('month', t01.sale_trg_date)
       ),
       totals AS (
@@ -66,8 +67,11 @@ router.get("/", async (req, res) => {
       GROUP BY sale_month, branch_code, branch_desc
       ORDER BY sale_month, branch_desc;
     `;
+    const replacements = { startDate, endDate };
+    if (classification) replacements.classification = classification;
+
     const results = await db.sequelize.query(sql, {
-      replacements: { date, category },
+      replacements,
       type: db.sequelize.QueryTypes.SELECT,
     });
     console.log(`Fetched ${results.length} records from vw_invoice_productmap`);

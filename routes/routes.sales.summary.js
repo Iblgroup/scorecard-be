@@ -5,7 +5,13 @@ const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
-    const { startDate = "2025-07-01", endDate = "2025-11-30" } = req.query;
+    const {
+      startDate = "2026-03-01",
+      endDate = "2026-03-31",
+      classification,
+      sku,
+      branch,
+    } = req.query;
 
     const sql = `
  WITH mapping AS (
@@ -15,8 +21,8 @@ router.get("/", async (req, res) => {
         classification
     FROM frg_dist_metric_prod_mapping
     WHERE 1=1
---  AND classification = 'A'
---  AND item_desc = 'ACTINIB 5MG TAB 10''s(PAK)'
+    ${classification ? `AND classification = :classification` : ""}
+    ${sku ? `AND item_desc = :sku` : ""}
 ),
 sd_sales AS (
     SELECT
@@ -25,8 +31,8 @@ sd_sales AS (
         SUM(t01.sale_val)                                                                               AS rd_sales
     FROM mv_target_sales_aggregate_25_26 t01
     WHERE t01.data_flag = 'SD'
-    AND t01.sale_trg_date BETWEEN '2026-03-01' AND '2026-03-31'
---  AND t01.branch_code::text = 'KARACHI'
+    AND t01.sale_trg_date BETWEEN :startDate AND :endDate
+    ${branch ? `AND t01.branch_code::text = :branch` : ""}
     GROUP BY t01.item_code, t01.branch_code
 ),
 ops_sales AS (
@@ -36,8 +42,8 @@ ops_sales AS (
         COALESCE(SUM(t01.c_oasales), 0) * -1                                                           AS ops_sales
     FROM mv_target_sales_aggregate_25_26 t01
     WHERE t01.data_flag = 'OPS'
-    AND t01.sale_trg_date BETWEEN '2026-03-01' AND '2026-03-31'
---  AND t01.branch_code::text = 'KARACHI'
+    AND t01.sale_trg_date BETWEEN :startDate AND :endDate
+    ${branch ? `AND t01.branch_code::text = :branch` : ""}
     GROUP BY t01.item_code, t01.branch_code
 )
 SELECT
@@ -57,11 +63,16 @@ GROUP BY
         WHEN m.classification IS NULL OR m.classification = '' THEN 'Other'
         ELSE m.classification
     END
-ORDER BY Classification;
+ORDER BY Classification
     `;
 
+    const replacements = { startDate, endDate };
+    if (classification) replacements.classification = classification;
+    if (sku) replacements.sku = sku;
+    if (branch) replacements.branch = branch;
+
     const results = await db.sequelize.query(sql, {
-      replacements: { startDate, endDate },
+      replacements,
       type: db.sequelize.QueryTypes.SELECT,
     });
     console.log(`Fetched ${results.length} records from vw_invoice_productmap`);
@@ -77,4 +88,3 @@ ORDER BY Classification;
 });
 
 export default router;
-

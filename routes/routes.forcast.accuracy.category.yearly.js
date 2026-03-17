@@ -5,7 +5,7 @@ const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
-    const { date = new Date().toISOString().slice(0, 10) } = req.query;
+    const { date = new Date().toISOString().slice(0, 10), classification } = req.query;
 
     const sql = `
 WITH base AS (
@@ -20,6 +20,7 @@ WITH base AS (
         ON t01.item_code = t02.sap_mapping_code::text
     WHERE t01.sale_trg_date >= DATE_TRUNC('month', :date::date) - INTERVAL '2 months'
       AND t01.sale_trg_date <  DATE_TRUNC('month', :date::date) + INTERVAL '1 month'
+      ${classification ? `AND t02.category = :classification` : ""}
     GROUP BY
         COALESCE(NULLIF(TRIM(t02.category), ''), 'Other'),
         DATE_TRUNC('month', t01.sale_trg_date),
@@ -35,6 +36,7 @@ trg AS (
         ON t02.sap_mapping_code = t03.material_code
     WHERE t03.target_date >= DATE_TRUNC('month', :date::date) - INTERVAL '2 months'
       AND t03.target_date <  DATE_TRUNC('month', :date::date) + INTERVAL '1 month'
+      ${classification ? `AND t02.category = :classification` : ""}
     GROUP BY
         COALESCE(NULLIF(TRIM(t02.category), ''), 'Other'),
         DATE_TRUNC('month', t03.target_date)
@@ -54,8 +56,11 @@ LEFT JOIN trg t
 ORDER BY b.month_start, b.category;
     `;
 
+    const replacements = { date };
+    if (classification) replacements.classification = classification;
+
     const results = await db.sequelize.query(sql, {
-      replacements: { date },
+      replacements,
       type: db.sequelize.QueryTypes.SELECT,
     });
     console.log(`Fetched ${results.length} records from vw_invoice_productmap`);

@@ -2,10 +2,17 @@ import express from "express";
 import db from "../models/index.js";
 
 const router = express.Router();
-
+// ${branch ? `AND t01.branch_code::text = :branch` : ""}
+// ${sku ? `AND t02.item_desc = :sku` : ""}
 router.get("/", async (req, res) => {
   try {
-    const { startDate = "2025-07-01", endDate = "2025-11-30" } = req.query;
+    const {
+      startDate = "2026-03-01",
+      endDate = "2026-03-31",
+      classification,
+      sku,
+      branch,
+    } = req.query;
 
     const sql = `
       WITH base AS (
@@ -16,9 +23,9 @@ router.get("/", async (req, res) => {
         FROM mv_target_sales_aggregate_25_26 t01
         INNER JOIN frg_dist_metric_prod_mapping t02
             ON t01.item_code = t02.sap_mapping_code::text
-            WHERE  
-    --        t02.category = 'B'and  --- apply filter
-            t01.sale_trg_date BETWEEN '2026-02-01' AND '2026-02-28' --- apply filter
+        WHERE 1=1
+        ${classification ? `AND t02.classification = :classification` : ""}
+        AND t01.sale_trg_date BETWEEN :startDate AND :endDate
     )
     SELECT
         CASE WHEN (rd_sales + ops_sales) = 0 THEN NULL
@@ -31,8 +38,13 @@ router.get("/", async (req, res) => {
     FROM base;
     `;
 
+    const replacements = { startDate, endDate };
+    if (classification) replacements.classification = classification;
+    if (sku) replacements.sku = sku;
+    if (branch) replacements.branch = branch;
+
     const results = await db.sequelize.query(sql, {
-      replacements: { startDate, endDate },
+      replacements,
       type: db.sequelize.QueryTypes.SELECT,
     });
     console.log(`Fetched ${results.length} records from vw_invoice_productmap`);
@@ -48,4 +60,3 @@ router.get("/", async (req, res) => {
 });
 
 export default router;
-

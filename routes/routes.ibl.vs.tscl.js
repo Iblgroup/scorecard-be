@@ -5,7 +5,7 @@ const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
-    const { startDate = "2025-07-01", endDate = "2025-11-30" } = req.query;
+    const { startDate = "2026-02-01", endDate = "2026-02-28", classification } = req.query;
 
     const sql = `
 WITH ibl_target AS (
@@ -15,7 +15,8 @@ WITH ibl_target AS (
     FROM mv_target_sales_aggregate_25_26 t01
     INNER JOIN frg_dist_metric_prod_mapping t02
         ON t01.item_code = t02.sap_mapping_code::text
-    WHERE t01.sale_trg_date BETWEEN '2026-02-01' AND '2026-02-28' 
+    WHERE t01.sale_trg_date BETWEEN :startDate AND :endDate
+    ${classification ? `AND t02.category = :classification` : ""}
     GROUP BY COALESCE(NULLIF(TRIM(t02.category), ''), 'Other')
 ),
 tscl_target AS (
@@ -25,7 +26,8 @@ tscl_target AS (
     FROM tscl_sap_targets t03
     INNER JOIN frg_dist_metric_prod_mapping t02
         ON t02.sap_mapping_code = t03.material_code
-    WHERE t03.target_date BETWEEN '2026-02-01' AND '2026-02-28'
+    WHERE t03.target_date BETWEEN :startDate AND :endDate
+    ${classification ? `AND t02.category = :classification` : ""}
     GROUP BY COALESCE(NULLIF(TRIM(t02.category), ''), 'Other')
 )
 SELECT
@@ -43,8 +45,11 @@ LEFT JOIN tscl_target t
 ORDER BY i.category;
     `;
 
+    const replacements = { startDate, endDate };
+    if (classification) replacements.classification = classification;
+
     const results = await db.sequelize.query(sql, {
-      replacements: { startDate, endDate },
+      replacements,
       type: db.sequelize.QueryTypes.SELECT,
     });
     console.log(`Fetched ${results.length} records from vw_invoice_productmap`);
