@@ -1,9 +1,9 @@
-name: dsr-be
+name: scorecard-be
 
 services:
   app:
-    image: iblcloud/searl-dsr-be:1.0.0
-    container_name: searl-dsr-be
+    image: iblcloud/searle-scorecard-be:1.0.0
+    container_name: searle-scorecard-be
     restart: unless-stopped
     build:
       context: .
