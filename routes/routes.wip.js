@@ -5,13 +5,35 @@ const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
-    const { date = new Date().toISOString().slice(0, 10), category = 'A' } = req.query;
+    const {
+      startDate,
+      endDate,
+      classification,
+      sku,
+      branch,
+    } = req.query;
+
     const sql = `
-        select swd.material_description as "item desc" ,sum(swd.total_value) as "Wip_total" from sap_wip_data swd
-        group by material_description ;
+        select t01.material_description
+          as "item desc" ,sum(t01.total_value) as "Wip_total" from sap_wip_data t01
+          left JOIN frg_dist_metric_prod_mapping t02
+              ON t02.sap_mapping_code::text = t01.material
+          where
+          t01.record_created_date
+          between :startDate and :endDate
+          ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
+          ${classification ? `AND t02.classification::text IN (:classification)` : ""}
+          ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
+          group by material_description , sap_mapping_code;
     `;
+
+    const replacements = { startDate, endDate };
+    if (branch) replacements.branch = Array.isArray(branch) ? branch : [branch];
+    if (classification) replacements.classification = Array.isArray(classification) ? classification : [classification];
+    if (sku) replacements.sku = Array.isArray(sku) ? sku : [sku];
+
     const results = await db.sequelize.query(sql, {
-      replacements: { date, category },
+      replacements,
       type: db.sequelize.QueryTypes.SELECT,
     });
     console.log(`Fetched ${results.length} records from vw_invoice_productmap`);
@@ -27,4 +49,3 @@ router.get("/", async (req, res) => {
 });
 
 export default router;
-

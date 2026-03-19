@@ -5,10 +5,16 @@ const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
-    const { date = new Date().toISOString().slice(0, 10), category = 'A' } = req.query;
+    const {
+      startDate,
+      endDate,
+      classification,
+      sku,
+      branch,
+    } = req.query;
+
     const sql = `
       SELECT
-      --    sttd.producttype,
           sttd.materialname,
           SUM(
               sttd.valuatedgrblocked        +
@@ -23,12 +29,26 @@ router.get("/", async (req, res) => {
               sttd.valuetiedempties         +
               sttd.valuevaluatedgrblocked
           )                                 AS total_value
-      FROM sap_tpkg_traw_data sttd
-      GROUP BY sttd.producttype, sttd.materialname
-      ORDER BY sttd.producttype, sttd.materialname;
+      FROM vw_sap_tpkg_traw_data sttd
+      LEFT JOIN frg_dist_metric_prod_mapping t02
+          ON t02.sap_mapping_code::text = sttd.product::text
+      WHERE 1=1
+      ${startDate && endDate ? `AND sttd.recorddate BETWEEN :startDate AND :endDate` : ""}
+      ${branch ? `AND sttd.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
+      ${classification ? `AND t02.classification::text IN (:classification)` : ""}
+      ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
+      GROUP BY sttd.materialname;
     `;
+
+    const replacements = {};
+    if (startDate) replacements.startDate = startDate;
+    if (endDate) replacements.endDate = endDate;
+    if (branch) replacements.branch = Array.isArray(branch) ? branch : [branch];
+    if (classification) replacements.classification = Array.isArray(classification) ? classification : [classification];
+    if (sku) replacements.sku = Array.isArray(sku) ? sku : [sku];
+
     const results = await db.sequelize.query(sql, {
-      replacements: { date, category },
+      replacements,
       type: db.sequelize.QueryTypes.SELECT,
     });
     console.log(`Fetched ${results.length} records from vw_invoice_productmap`);
@@ -44,4 +64,3 @@ router.get("/", async (req, res) => {
 });
 
 export default router;
-

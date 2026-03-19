@@ -5,24 +5,41 @@ const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
-    const { startDate = "2025-07-01", endDate = "2025-11-30" } = req.query;
+    const {
+      startDate,
+      endDate,
+      classification,
+      sku,
+      branch,
+    } = req.query;
 
     const sql = `
-SELECT
-    sdvo.material_name,
-    SUM(sdvo.delivery_quantity ) AS total_delivery_qty,
-    SUM(sdvo.so_quantity )  AS total_order_qty,
-    ROUND(
-        SUM(sdvo.delivery_quantity)::numeric /
-        NULLIF(SUM(sdvo.so_quantity)::numeric, 0) * 100
-    , 2)    AS delivery_pct
-FROM sap_dispatch_vs_order sdvo
-GROUP BY sdvo.material_name
-ORDER BY sdvo.material_name;
+      SELECT
+          t01.material_name,
+          SUM(t01.delivery_quantity)                                          AS total_delivery_qty,
+          SUM(t01.so_quantity)                                                AS total_order_qty,
+          ROUND(
+              SUM(t01.delivery_quantity)::numeric /
+              NULLIF(SUM(t01.so_quantity)::numeric, 0) * 100
+          , 2)                                                                AS delivery_pct
+      FROM dispatch_vs_order t01
+      LEFT JOIN frg_dist_metric_prod_mapping t02
+          ON t02.sap_mapping_code::text = t01.material_no::text
+      WHERE t02.category IN ('A', 'B', 'C')
+      AND t01.actual_gm_date BETWEEN :startDate AND :endDate
+      ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
+      ${classification ? `AND t02.classification::text IN (:classification)` : ""}
+      ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
+      GROUP BY t01.material_name;
     `;
 
+    const replacements = { startDate, endDate };
+    if (branch) replacements.branch = Array.isArray(branch) ? branch : [branch];
+    if (classification) replacements.classification = Array.isArray(classification) ? classification : [classification];
+    if (sku) replacements.sku = Array.isArray(sku) ? sku : [sku];
+
     const results = await db.sequelize.query(sql, {
-      replacements: { startDate, endDate },
+      replacements,
       type: db.sequelize.QueryTypes.SELECT,
     });
     console.log(`Fetched ${results.length} records from vw_invoice_productmap`);
@@ -38,4 +55,3 @@ ORDER BY sdvo.material_name;
 });
 
 export default router;
-
