@@ -5,7 +5,12 @@ const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
-    const { date = new Date().toISOString().slice(0, 10), classification } = req.query;
+    const {
+      date = new Date().toISOString().slice(0, 10),
+      classification,
+      sku,
+      branch,
+    } = req.query;
 
     const sql = `
       WITH base AS (
@@ -19,9 +24,12 @@ router.get("/", async (req, res) => {
           FROM mv_target_sales_aggregate_25_26 t01
           INNER JOIN frg_dist_metric_prod_mapping t02
               ON t01.item_code = t02.sap_mapping_code::text
-          WHERE t01.sale_trg_date >= DATE_TRUNC('month', :date::date) - INTERVAL '2 months'
-            AND t01.sale_trg_date <  DATE_TRUNC('month', :date::date) + INTERVAL '1 month'
-            ${classification ? `AND t02.category = :classification` : ""}
+          WHERE
+              t01.sale_trg_date >= DATE_TRUNC('month', :date::date) - INTERVAL '2 months'
+              AND t01.sale_trg_date < DATE_TRUNC('month', :date::date) + INTERVAL '1 month'
+              ${classification ? `AND t02.classification::text IN (:classification)` : ""}
+              ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
+              ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
           GROUP BY
               COALESCE(NULLIF(TRIM(t02.category), ''), 'Other'),
               DATE_TRUNC('month', t01.sale_trg_date),
@@ -41,7 +49,9 @@ router.get("/", async (req, res) => {
     `;
 
     const replacements = { date };
-    if (classification) replacements.classification = classification;
+    if (classification) replacements.classification = Array.isArray(classification) ? classification : [classification];
+    if (sku) replacements.sku = Array.isArray(sku) ? sku : [sku];
+    if (branch) replacements.branch = Array.isArray(branch) ? branch : [branch];
 
     const results = await db.sequelize.query(sql, {
       replacements,
@@ -50,7 +60,7 @@ router.get("/", async (req, res) => {
     console.log(`Fetched ${results.length} records from forecast accuracy category monthly`);
     res.json({ success: true, count: results.length, data: results });
   } catch (error) {
-    console.error("Error fetching summary:", error);
+    console.error("Error fetching forecast accuracy category monthly:", error);
     res.status(500).json({
       success: false,
       message: "Error fetching data",
