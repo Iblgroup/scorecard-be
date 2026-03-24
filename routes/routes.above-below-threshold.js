@@ -35,8 +35,8 @@ router.get("/", async (req, res) => {
                 ON t01.item_code::text = t02.sap_mapping_code::text
             WHERE t02.category IN ('A', 'B', 'C')
             ${classification ? `AND t02.category::text IN (:classification)` : ""}
-            ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
             ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
+            ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
             GROUP BY t02.category, t02.sap_mapping_code
         ),
         cover_days_final AS (

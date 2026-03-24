@@ -24,11 +24,11 @@ router.get("/", async (req, res) => {
             INNER JOIN frg_dist_metric_prod_mapping t02
                 ON t01.item_code::text = t02.sap_mapping_code::text
             WHERE t01.data_flag = 'OPS'
-            AND t02.category IN ('A', 'B', 'C')
+            --AND t02.category IN ('A', 'B', 'C')
             AND t01.sale_trg_date >= '2021-06-30'
             AND t01.sale_trg_date <= :endDate
-            ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
             ${classification ? `AND t02.classification::text IN (:classification)` : ""}
+            ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
             ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
         ),
         ibl_direct_target AS (
@@ -38,10 +38,10 @@ router.get("/", async (req, res) => {
             INNER JOIN frg_dist_metric_prod_mapping t02
                 ON t01.item_code::text = t02.sap_mapping_code::text
             WHERE t01.data_flag = 'OPS'
-            AND t02.category IN ('A', 'B', 'C')
+            --AND t02.category IN ('A', 'B', 'C')
             AND t01.sale_trg_date BETWEEN :startDate AND :endDate
-            ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
             ${classification ? `AND t02.classification::text IN (:classification)` : ""}
+            ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
             ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
         ),
         ibl_primary_target AS (
@@ -51,10 +51,10 @@ router.get("/", async (req, res) => {
             INNER JOIN frg_dist_metric_prod_mapping t02
                 ON t01.item_code::text = t02.sap_mapping_code::text
             WHERE t01.data_flag = 'SD'
-            AND t02.category IN ('A', 'B', 'C')
+            --AND t02.category IN ('A', 'B', 'C')
             AND t01.sale_trg_date BETWEEN :startDate AND :endDate
-            ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
             ${classification ? `AND t02.classification::text IN (:classification)` : ""}
+            ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
             ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
         ),
         days_calc AS (

@@ -2,7 +2,7 @@ import express from "express";
 import db from "../models/index.js";
 
 const router = express.Router();
-
+// ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
 router.get("/", async (req, res) => {
   try {
     const {
@@ -27,7 +27,6 @@ router.get("/", async (req, res) => {
           ON t02.sap_mapping_code::text = t01.material_no::text
       WHERE t02.category IN ('A', 'B', 'C')
       AND t01.actual_gm_date BETWEEN :startDate AND :endDate
-      ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
       ${classification ? `AND t02.classification::text IN (:classification)` : ""}
       ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
       GROUP BY t01.material_name;

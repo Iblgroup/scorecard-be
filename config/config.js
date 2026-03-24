@@ -18,8 +18,8 @@ export const config = {
       idle_in_transaction_session_timeout: 120000,
     },
     pool: {
-      max: 50,
-      min: 30,
+      max: 10,
+      min: 5,
       acquire: 300000,
       idle: 10000,
     },

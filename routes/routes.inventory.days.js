@@ -65,8 +65,8 @@ router.get("/", async (req, res) => {
             WHERE t01.data_flag = 'OPS'
             AND t01.sale_trg_date BETWEEN :startDate AND :endDate
             ${classification ? `AND t02.classification::text IN (:classification)` : ""}
-            ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
             ${branch ? `AND bm.hub_branch_code::text IN (:branch)` : ""}
+            ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
             GROUP BY t02.category, bm.hub_branch_code, t02.item_desc
         ),
         ibl_targets AS (

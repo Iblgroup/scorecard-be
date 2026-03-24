@@ -2,7 +2,7 @@ import express from "express";
 import db from "../models/index.js";
 
 const router = express.Router();
-
+// ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
 router.get("/", async (req, res) => {
   try {
     const {
@@ -21,7 +21,6 @@ router.get("/", async (req, res) => {
           where
           t01.record_created_date
           between :startDate and :endDate
-          ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
           ${classification ? `AND t02.classification::text IN (:classification)` : ""}
           ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
           group by material_description , sap_mapping_code;

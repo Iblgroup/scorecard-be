@@ -44,8 +44,8 @@ router.get("/", async (req, res) => {
             INNER JOIN frg_dist_metric_prod_mapping t02
                 ON t01.item_code::text = t02.sap_mapping_code::text
             WHERE t02.category IN ('A', 'B', 'C')
-            ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
             ${classification ? `AND t02.classification::text IN (:classification)` : ""}
+            ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
             ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
             GROUP BY t02.category, t02.sap_mapping_code, t02.tgt, t02.classification
         ),

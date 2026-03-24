@@ -23,8 +23,8 @@ router.get("/", async (req, res) => {
                 ON t01.item_code = t02.sap_mapping_code::text
             WHERE t01.sale_trg_date BETWEEN :startDate AND :endDate
             AND t02.category IN ('A', 'B', 'C')
-            ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
             ${classification ? `AND t02.category::text IN (:classification)` : ""}
+            ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
             ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
             GROUP BY COALESCE(NULLIF(TRIM(t02.category), ''), 'Other')
         ),

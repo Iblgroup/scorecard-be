@@ -25,8 +25,8 @@ router.get("/", async (req, res) => {
           WHERE 1=1
           AND t01.sale_trg_date BETWEEN :startDate AND :endDate
           ${classification ? `AND t02.classification::text IN (:classification)` : ""}
-          ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
           ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
+          ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
       )
       SELECT
           CASE WHEN (rd_sales + ops_sales) = 0 THEN NULL

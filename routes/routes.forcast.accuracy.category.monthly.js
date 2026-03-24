@@ -28,8 +28,8 @@ router.get("/", async (req, res) => {
               t01.sale_trg_date >= DATE_TRUNC('month', :date::date) - INTERVAL '2 months'
               AND t01.sale_trg_date < DATE_TRUNC('month', :date::date) + INTERVAL '1 month'
               ${classification ? `AND t02.classification::text IN (:classification)` : ""}
-              ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
               ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
+              ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
           GROUP BY
               COALESCE(NULLIF(TRIM(t02.category), ''), 'Other'),
               DATE_TRUNC('month', t01.sale_trg_date),
