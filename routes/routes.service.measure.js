@@ -16,7 +16,7 @@ router.get("/", async (req, res) => {
     const sql = `
         WITH cover_days_per_sku AS (
             SELECT
-                t02.category,
+                t02.classification,
                 t02.sap_mapping_code,
                 l.branch_code::text,
                 l.branch_desc::text,
@@ -36,31 +36,27 @@ router.get("/", async (req, res) => {
                 -- IBL Primary Target (SD) - current month only
                 COALESCE(SUM(CASE WHEN t01.data_flag = 'SD'
                     AND t01.sale_trg_date BETWEEN :startDate AND :endDate
-                    THEN t01.trg_val ELSE 0 END), 0) AS ibl_primary_target,
-                -- Remaining Days
-                EXTRACT(DAY FROM DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day') -
-                EXTRACT(DAY FROM CURRENT_DATE) AS remaining_days
+                    THEN t01.trg_val ELSE 0 END), 0) AS ibl_primary_target
             FROM mv_target_sales_aggregate_25_26 t01
             INNER JOIN frg_dist_metric_prod_mapping t02
                 ON t01.item_code::text = t02.sap_mapping_code::text
             INNER JOIN locations l
                 ON t01.branch_code::text = l.branch_code::text
-            WHERE t02.category IN ('A', 'B', 'C')
-            ${classification ? `AND t02.category::text IN (:classification)` : ""}
+            WHERE t02.classification IN ('A', 'B', 'C')
+            ${classification ? `AND t02.classification::text IN (:classification)` : ""}
             ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
             ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
-            GROUP BY t02.category, t02.sap_mapping_code, l.branch_code, l.branch_desc
+            GROUP BY t02.classification, t02.sap_mapping_code, l.branch_code, l.branch_desc
         ),
         cover_days_final AS (
             SELECT
-                category,
+                classification,
                 sap_mapping_code,
                 branch_code,
                 branch_desc,
                 ROUND(
                     COALESCE(closing_inventory, 0)::numeric /
-                    NULLIF((ibl_direct_target + ibl_primary_target)::numeric, 0) *
-                    remaining_days
+                    NULLIF((ibl_direct_target + ibl_primary_target)::numeric, 0) 
                 , 0) AS cover_days
             FROM cover_days_per_sku
         ),
@@ -68,25 +64,25 @@ router.get("/", async (req, res) => {
             SELECT
                 branch_code,
                 branch_desc,
-                category,
+                classification,
                 COUNT(DISTINCT sap_mapping_code)                                AS total_sku,
                 COUNT(DISTINCT CASE
-                    WHEN category = 'A' AND cover_days > 30  AND cover_days < 9999 THEN sap_mapping_code
-                    WHEN category = 'B' AND cover_days > 20  AND cover_days < 9999 THEN sap_mapping_code
-                    WHEN category = 'C' AND cover_days > 15  AND cover_days < 9999 THEN sap_mapping_code
+                    WHEN classification = 'A' AND cover_days > 30  AND cover_days < 9999 THEN sap_mapping_code
+                    WHEN classification = 'B' AND cover_days > 20  AND cover_days < 9999 THEN sap_mapping_code
+                    WHEN classification = 'C' AND cover_days > 15  AND cover_days < 9999 THEN sap_mapping_code
                 END)                                                            AS sku_above_threshold
             FROM cover_days_final
-            GROUP BY branch_code, branch_desc, category
+            GROUP BY branch_code, branch_desc, classification
         )
         SELECT
             branch_desc,
-            MAX(CASE WHEN category = 'A' THEN
+            MAX(CASE WHEN classification = 'A' THEN
                 ROUND(sku_above_threshold::numeric / NULLIF(total_sku::numeric, 0) * 100, 2)
             END)                                                                AS "SKU-A%",
-            MAX(CASE WHEN category = 'B' THEN
+            MAX(CASE WHEN classification = 'B' THEN
                 ROUND(sku_above_threshold::numeric / NULLIF(total_sku::numeric, 0) * 100, 2)
             END)                                                                AS "SKU-B%",
-            MAX(CASE WHEN category = 'C' THEN
+            MAX(CASE WHEN classification = 'C' THEN
                 ROUND(sku_above_threshold::numeric / NULLIF(total_sku::numeric, 0) * 100, 2)
             END)                                                                AS "SKU-C%"
         FROM totals

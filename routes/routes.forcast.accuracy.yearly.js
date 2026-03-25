@@ -6,8 +6,8 @@ const router = express.Router();
 router.get("/", async (req, res) => {
   try {
     const {
-      startDate = "2026-03-01",
-      endDate = "2026-03-31",
+      startDate,
+      endDate,
       classification,
       sku,
       branch,
@@ -21,16 +21,19 @@ router.get("/", async (req, res) => {
           FROM mv_target_sales_aggregate_25_26 t01
           INNER JOIN frg_dist_metric_prod_mapping t02
               ON t01.item_code = t02.sap_mapping_code::text
-          WHERE 1=1
-          AND t01.sale_trg_date BETWEEN :startDate AND :endDate
+          WHERE t01.sale_trg_date BETWEEN :startDate AND :endDate
           ${classification ? `AND t02.classification::text IN (:classification)` : ""}
           ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
           ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
       ),
       trg AS (
-          SELECT SUM(efp * value) AS target_value
+          SELECT SUM(t03.efp * value) AS target_value
           FROM tscl_sap_targets t03
+          INNER JOIN frg_dist_metric_prod_mapping t02
+              ON t03.material_code::text = t02.sap_mapping_code::text
           WHERE t03.target_date BETWEEN :startDate AND :endDate
+          ${classification ? `AND t02.classification::text IN (:classification)` : ""}
+          ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
       )
       SELECT
           CASE WHEN (b.rd_sales + b.ops_sales) = 0 THEN NULL

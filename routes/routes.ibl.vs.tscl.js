@@ -16,33 +16,33 @@ router.get("/", async (req, res) => {
     const sql = `
         WITH ibl_target AS (
             SELECT
-                COALESCE(NULLIF(TRIM(t02.category), ''), 'Other') AS category,
+                COALESCE(NULLIF(TRIM(t02.classification), ''), 'Other') AS classification,
                 SUM(t01.trg_val) AS ibl_primary_target
             FROM mv_target_sales_aggregate_25_26 t01
             INNER JOIN frg_dist_metric_prod_mapping t02
                 ON t01.item_code = t02.sap_mapping_code::text
             WHERE t01.sale_trg_date BETWEEN :startDate AND :endDate
-            AND t02.category IN ('A', 'B', 'C')
-            ${classification ? `AND t02.category::text IN (:classification)` : ""}
+            AND t02.classification IN ('A', 'B', 'C')
+            ${classification ? `AND t02.classification::text IN (:classification)` : ""}
             ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
             ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
-            GROUP BY COALESCE(NULLIF(TRIM(t02.category), ''), 'Other')
+            GROUP BY COALESCE(NULLIF(TRIM(t02.classification), ''), 'Other')
         ),
         tscl_target AS (
             SELECT
-                COALESCE(NULLIF(TRIM(t02.category), ''), 'Other') AS category,
+                COALESCE(NULLIF(TRIM(t02.classification), ''), 'Other') AS classification,
                 SUM(t03.efp * t03.value) AS tscl_trg
             FROM tscl_sap_targets t03
             INNER JOIN frg_dist_metric_prod_mapping t02
                 ON t02.sap_mapping_code = t03.material_code
             WHERE t03.target_date BETWEEN :startDate AND :endDate
-            AND t02.category IN ('A', 'B', 'C')
-            ${classification ? `AND t02.category::text IN (:classification)` : ""}
+            AND t02.classification IN ('A', 'B', 'C')
+            ${classification ? `AND t02.classification::text IN (:classification)` : ""}
             ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
-            GROUP BY COALESCE(NULLIF(TRIM(t02.category), ''), 'Other')
+            GROUP BY COALESCE(NULLIF(TRIM(t02.classification), ''), 'Other')
         )
         SELECT
-            i.category,
+            i.classification,
             i.ibl_primary_target,
             t.tscl_trg,
             t.tscl_trg - i.ibl_primary_target                AS ibl_vs_tscl_target_diff,
@@ -52,8 +52,8 @@ router.get("/", async (req, res) => {
             , 2)                                              AS forecast_vs_budget_pct
         FROM ibl_target i
         LEFT JOIN tscl_target t
-            ON i.category = t.category
-        ORDER BY i.category;
+            ON i.classification = t.classification
+        ORDER BY i.classification;
     `;
 
     const replacements = { startDate, endDate };

@@ -56,25 +56,16 @@ router.get("/", async (req, res) => {
             ${classification ? `AND t02.classification::text IN (:classification)` : ""}
             ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
             ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
-        ),
-        days_calc AS (
-            SELECT
-                EXTRACT(DAY FROM DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day')    AS total_days_in_month,
-                EXTRACT(DAY FROM CURRENT_DATE)                                                                  AS days_passed,
-                EXTRACT(DAY FROM DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day') -
-                EXTRACT(DAY FROM CURRENT_DATE)                                                                  AS remaining_days
         )
         SELECT
             ci.Closing_Inventory_IBL,
             ROUND(
                 COALESCE(ci.Closing_Inventory_IBL, 0)::numeric /
-                NULLIF((d.IBL_Direct_Month_Target + p.IBL_Primary_Month_Target)::numeric, 0) *
-                dc.remaining_days
+                NULLIF((d.IBL_Direct_Month_Target + p.IBL_Primary_Month_Target)::numeric, 0)
             , 1)                                                                                               AS cover_days
         FROM closing_inv ci
         CROSS JOIN ibl_direct_target d
         CROSS JOIN ibl_primary_target p
-        CROSS JOIN days_calc dc;
     `;
 
     const replacements = { startDate, endDate };
