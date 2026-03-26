@@ -2,7 +2,7 @@ import express from "express";
 import db from "../models/index.js";
 
 const router = express.Router();
-// ${branch ? `AND sttd.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
+//${branch ? `AND sttd.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
 router.get("/", async (req, res) => {
   try {
     const {
@@ -30,12 +30,10 @@ router.get("/", async (req, res) => {
               sttd.valuevaluatedgrblocked
           )                                 AS total_value
       FROM vw_sap_tpkg_traw_data sttd
-      LEFT JOIN frg_dist_metric_prod_mapping t02
-          ON t02.sap_mapping_code::text = sttd.product::text
-      WHERE 1=1
-      ${startDate && endDate ? `AND sttd.recorddate BETWEEN :startDate AND :endDate` : ""}
-      ${classification ? `AND t02.classification::text IN (:classification)` : ""}
-      ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
+      WHERE sttd.executiondate = (SELECT MAX(sttd.executiondate) FROM vw_sap_tpkg_traw_data sttd
+      WHERE sttd.executiondate BETWEEN :startDate AND :endDate)
+      ${sku ? `AND sttd.product::text IN (SELECT sap_mapping_code::text FROM frg_dist_metric_prod_mapping WHERE sap_mapping_code::text IN (:sku))` : ""}
+      ${classification ? `AND sttd.product::text IN (SELECT sap_mapping_code::text FROM frg_dist_metric_prod_mapping WHERE classification::text IN (:classification))` : ""}
       GROUP BY sttd.materialname;
     `;
 
