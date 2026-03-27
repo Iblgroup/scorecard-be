@@ -3,18 +3,17 @@ import db from "../models/index.js";
 
 const router = express.Router();
 // ${sku ? 'AND t01.sap_mapping_code::text IN (:sku)' : ''}
+// ${classification ? 'AND t01.classification::text IN (:classification)' : ''}
 router.get("/", async (req, res) => {
   try {
     const { classification, sku } = req.query;
     const sql = `
       select * from mv_filter_sku_branch t01
       WHERE 1=1
-      ${classification ? 'AND t01.classification::text IN (:classification)' : ''}
     `;
     const replacements = {};
     if (classification) replacements.classification = Array.isArray(classification) ? classification : [classification];
     if (sku) replacements.sku = Array.isArray(sku) ? sku : [sku];
-
     const results = await db.sequelize.query(sql, {
       replacements,
       type: db.sequelize.QueryTypes.SELECT,
