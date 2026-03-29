@@ -6,66 +6,107 @@ const router = express.Router();
 router.get("/", async (req, res) => {
   try {
     const {
-      startDate = "2026-03-01",
-      endDate = "2026-03-31",
+      startDate,
+      endDate,
       classification,
       sku,
       branch,
     } = req.query;
 
     const sql = `
-      WITH cover_days_per_sku AS (
-          SELECT
-              t02.classification,
-              t02.sap_mapping_code,
-              CASE
-                  WHEN ABS(COALESCE(SUM(CASE WHEN t01.data_flag = 'OPS'
-                      AND t01.sale_trg_date >= '2021-06-30'
-                      THEN t01.inv_value END), 0)) < 0.001 THEN 0
-                  ELSE COALESCE(SUM(CASE WHEN t01.data_flag = 'OPS'
-                      AND t01.sale_trg_date >= '2021-06-30'
-                      THEN t01.inv_value END), 0)
-              END                                                             AS closing_inventory,
-              COALESCE(SUM(CASE WHEN t01.data_flag = 'OPS'
-                  AND t01.sale_trg_date BETWEEN :startDate AND :endDate
-                  THEN t01.trg_val ELSE 0 END), 0)                           AS ibl_direct_target,
-              COALESCE(SUM(CASE WHEN t01.data_flag = 'SD'
-                  AND t01.sale_trg_date BETWEEN :startDate AND :endDate
-                  THEN t01.trg_val ELSE 0 END), 0)                           AS ibl_primary_target
-          FROM mv_target_sales_aggregate_25_26 t01
-          INNER JOIN frg_dist_metric_prod_mapping t02
-              ON t01.item_code::text = t02.sap_mapping_code::text
-          WHERE t02.classification IN ('A', 'B', 'C')
-          ${classification ? `AND t02.classification::text IN (:classification)` : ""}
-          ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
-          ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
-          GROUP BY t02.classification, t02.sap_mapping_code
-      ),
-      cover_days_final AS (
-          SELECT
-              classification,
-              sap_mapping_code,
-              ROUND(
-                  closing_inventory::numeric /
-                  NULLIF((ibl_direct_target + ibl_primary_target)::numeric, 0)
-              , 1)                                                            AS cover_days
-          FROM cover_days_per_sku
-      )
-      SELECT
-          classification                                                      AS "Classification",
-          COUNT(DISTINCT CASE
-              WHEN classification = 'A' AND cover_days > 30  AND cover_days < 9999 THEN sap_mapping_code
-              WHEN classification = 'B' AND cover_days > 20  AND cover_days < 9999 THEN sap_mapping_code
-              WHEN classification = 'C' AND cover_days > 15  AND cover_days < 9999 THEN sap_mapping_code
-          END)                                                                AS "No Of SKUs > Threshold",
-          COUNT(DISTINCT CASE
-              WHEN classification = 'A' AND cover_days < 30  THEN sap_mapping_code
-              WHEN classification = 'B' AND cover_days < 20  THEN sap_mapping_code
-              WHEN classification = 'C' AND cover_days < 15  THEN sap_mapping_code
-          END)                                                                AS "No Of SKUs < Threshold"
-      FROM cover_days_final
-      GROUP BY classification
-      ORDER BY classification;
+     WITH invval AS (
+    SELECT
+        b.mapping_code                                                  AS item_code,
+        d.matnr_desc                                                    AS item_desc,
+        t02.classification,
+        t02.sap_mapping_code,
+        SUM(mtsa.inv_value)                                             AS inv_value,
+        0                                                               AS trg_value
+    FROM mv_target_sales_aggregate_25_26 mtsa
+    INNER JOIN frg_sap_items_detail b ON mtsa.item_code = b.matnr
+    INNER JOIN frg_sap_items_detail d ON d.matnr = b.mapping_code
+    LEFT JOIN frg_dist_metric_prod_mapping t02
+        ON mtsa.item_code::text = t02.sap_code::text
+    WHERE mtsa.sale_trg_date <= :endDate
+    AND mtsa.data_flag = 'OPS'
+    AND b.busline_id IN ('P07', 'P08', 'P12')
+    ${sku ? `AND b.mapping_code::text IN (:sku)` : ""}
+    ${branch ? `AND mtsa.branch_code::text IN (:branch)` : ""}
+    ${classification ? `AND t02.classification::text IN (:classification)` : ""}
+    GROUP BY b.mapping_code, d.matnr_desc, t02.classification, t02.sap_mapping_code
+    UNION ALL
+    SELECT
+        b.mapping_code                                                  AS item_code,
+        d.matnr_desc                                                    AS item_desc,
+        t02.classification,
+        t02.sap_mapping_code,
+        0                                                               AS inv_value,
+        SUM(mtsa.trg_val)                                               AS trg_value
+    FROM mv_target_sales_aggregate_25_26 mtsa
+    INNER JOIN frg_sap_items_detail b ON mtsa.item_code = b.matnr
+    INNER JOIN frg_sap_items_detail d ON d.matnr = b.mapping_code
+    LEFT JOIN frg_dist_metric_prod_mapping t02
+        ON mtsa.item_code::text = t02.sap_code::text
+    WHERE mtsa.sale_trg_date BETWEEN DATE_TRUNC('month', :endDate::date)
+                                 AND (DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month' - INTERVAL '1 day')::date
+    AND b.busline_id IN ('P07', 'P08', 'P12')
+    ${sku ? `AND b.mapping_code::text IN (:sku)` : ""}
+    ${branch ? `AND mtsa.branch_code::text IN (:branch)` : ""}
+    ${classification ? `AND t02.classification::text IN (:classification)` : ""}
+    GROUP BY b.mapping_code, d.matnr_desc, t02.classification, t02.sap_mapping_code
+),
+days_calc AS (
+    SELECT
+        EXTRACT(DAY FROM (DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month' - INTERVAL '1 day')::date) AS total_days_in_month
+),
+aggregated AS (
+    SELECT
+        item_code,
+        item_desc,
+        classification,
+        sap_mapping_code,
+        SUM(inv_value)                                                  AS inv_value,
+        SUM(trg_value)                                                  AS trg_value
+    FROM invval
+    GROUP BY item_code, item_desc, classification, sap_mapping_code
+),
+cover_days_detail AS (
+    SELECT
+        item_code,
+        item_desc,
+        classification,
+        sap_mapping_code,
+        inv_value,
+        trg_value,
+        ROUND(
+            a.trg_value::numeric /
+            NULLIF(dc.total_days_in_month, 0)
+        , 1)                                                            AS daily_target,
+        ROUND(
+            a.inv_value::numeric /
+            NULLIF(
+                a.trg_value::numeric /
+                NULLIF(dc.total_days_in_month, 0)
+            , 0)
+        , 1)                                                            AS cover_days
+    FROM aggregated a
+    CROSS JOIN days_calc dc
+)
+SELECT
+    classification                                                      AS "Classification",
+COUNT(DISTINCT CASE
+    WHEN classification = 'A' AND COALESCE(cover_days, 0) > 30  AND COALESCE(cover_days, 0) < 9999 THEN sap_mapping_code
+    WHEN classification = 'B' AND COALESCE(cover_days, 0) > 20  AND COALESCE(cover_days, 0) < 9999 THEN sap_mapping_code
+    WHEN classification = 'C' AND COALESCE(cover_days, 0) > 15  AND COALESCE(cover_days, 0) < 9999 THEN sap_mapping_code
+END)                                                                AS "No Of SKUs > Threshold",
+COUNT(DISTINCT CASE
+    WHEN classification = 'A' AND COALESCE(cover_days, 0) <= 30  THEN sap_mapping_code
+    WHEN classification = 'B' AND COALESCE(cover_days, 0) <= 20  THEN sap_mapping_code
+    WHEN classification = 'C' AND COALESCE(cover_days, 0) <= 15  THEN sap_mapping_code
+END)                                                                AS "No Of SKUs < Threshold"
+FROM cover_days_detail
+GROUP BY classification
+ORDER BY classification;
     `;
 
     const replacements = { startDate, endDate };

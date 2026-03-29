@@ -14,66 +14,52 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     const sql = `
-      WITH mapping AS (
-          SELECT DISTINCT
-              sap_mapping_code,
-              item_desc,
-              classification
-          FROM frg_dist_metric_prod_mapping
-          WHERE 1=1
-          ${classification ? `AND classification::text IN (:classification)` : ""}
-          ${sku ? `AND sap_mapping_code::text IN (:sku)` : ""}
-      ),
-      sd_sales AS (
-          SELECT
-              t01.item_code,
-              t01.branch_code,
-              SUM(t01.sale_val)                                               AS rd_sales
-          FROM mv_target_sales_aggregate_25_26 t01
-          WHERE t01.data_flag = 'SD'
-          AND t01.sale_trg_date BETWEEN :startDate AND :endDate
-          ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
-          GROUP BY t01.item_code, t01.branch_code
-      ),
-      ops_sales AS (
-          SELECT
-              t01.item_code,
-              t01.branch_code,
-              COALESCE(SUM(t01.c_oasales), 0) * -1                           AS ops_sales
-          FROM mv_target_sales_aggregate_25_26 t01
-          WHERE t01.data_flag = 'OPS'
-          AND t01.sale_trg_date BETWEEN :startDate AND :endDate
-          ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
-          GROUP BY t01.item_code, t01.branch_code
-      ),
-      combined AS (
-          SELECT
-              COALESCE(s.item_code,   o.item_code)   AS item_code,
-              COALESCE(s.branch_code, o.branch_code) AS branch_code,
-              COALESCE(s.rd_sales,  0)               AS rd_sales,
-              COALESCE(o.ops_sales, 0)               AS ops_sales
-          FROM sd_sales s
-          FULL OUTER JOIN ops_sales o
-              ON s.item_code    = o.item_code
-              AND s.branch_code = o.branch_code
-      )
-      SELECT
-          CASE
-              WHEN m.classification IS NULL OR m.classification = '' THEN 'Other'
-              ELSE m.classification
-          END                                                                 AS classification,
-          COUNT(DISTINCT m.item_desc)                                         AS sku,
-          SUM(c.rd_sales)                                                     AS rd_sales,
-          SUM(c.ops_sales)                                                    AS ops_sales,
-          SUM(c.rd_sales) + SUM(c.ops_sales)                                  AS new_total_all_sales
-      FROM mapping m
-      LEFT JOIN combined c ON c.item_code = m.sap_mapping_code::text
-      GROUP BY
-          CASE
-              WHEN m.classification IS NULL OR m.classification = '' THEN 'Other'
-              ELSE m.classification
-          END
-      ORDER BY classification;
+      with data_ as (
+select 
+data_flag
+,a.item_code
+,b.mapping_code 
+,b.matnr_desc item_desc,d.matnr_desc unq_item_desc
+,sum(a.sale_qty)sale_qty,sum(a.sale_val )sale_val
+,sum(a.inv_qty )inv_qty,sum(a.inv_value )inv_value
+,sum(a.c_oasales )c_oasales,sum(a.c_asales )c_asales
+,sum(a.trg_val )trg_val
+from mv_target_sales_aggregate_25_26 a
+inner join frg_sap_items_detail b on (a.item_code=b.matnr)
+inner join frg_sap_items_detail d on (d.matnr=b.mapping_code)
+where a.sale_trg_date BETWEEN :startDate AND :endDate
+and b.busline_id in ('P07','P08','P12') 
+--and a.branch_code  = '8019'
+${branch ? `AND a.branch_code::text IN (:branch)` : ""}
+group by 
+a.item_code
+,b.matnr_desc ,b.mapping_code 
+,d.matnr_desc ,data_flag
+),itm_class as (select distinct sap_mapping_code,classification from frg_dist_metric_prod_mapping fdmpm )
+, fdata as (select 
+data_flag,
+mapping_code item_code
+,unq_item_desc item_desc,classification
+,sale_qty,sale_val,inv_qty,inv_value,c_oasales,c_asales,trg_val
+from data_
+left outer join itm_class a on (data_.mapping_code::text=a.sap_mapping_code::text)
+)
+select 
+coalesce(classification,'Others')classification ,count(distinct item_code)sku
+,sum(case when data_flag='SD' then (sale_val) else 0 end) rd_sales
+,sum(
+	case when data_flag='OPS'  then (c_oasales*-1) 
+	   else 0 end) ops_sales
+,(sum(case when data_flag='SD' then (sale_val) else 0 end) +
+sum(
+	case when data_flag='OPS'  then (c_oasales*-1) 
+	   else 0 end))new_total_all_sales	   
+from fdata
+where 1=1
+${classification ? `AND classification::text IN (:classification)` : ""}
+${sku ? `AND item_code::text IN (:sku)` : ""}
+group by classification ;
+
     `;
 
     const replacements = { startDate, endDate };
