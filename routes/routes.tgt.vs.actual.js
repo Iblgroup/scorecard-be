@@ -29,7 +29,7 @@ router.get("/", async (req, res) => {
     WHERE mtsa.data_flag = 'OPS'
     AND mtsa.sale_trg_date <= :endDate
     AND b.busline_id IN ('P07', 'P08', 'P12')
-    ${classification ? `AND t02.classification::text IN (:classification)` : `AND t02.category IN ('A', 'B', 'C')`}
+    ${classification ? `AND t02.classification::text IN (:classification)` : `AND t02.classification IN ('A', 'B', 'C')`}
     ${sku ? `AND b.mapping_code::text IN (:sku)` : ""}
     ${branch ? `AND mtsa.branch_code::text IN (:branch)` : ""}
     GROUP BY t02.classification
@@ -47,7 +47,7 @@ ibl_direct_target AS (
     AND mtsa.sale_trg_date BETWEEN DATE_TRUNC('month', :endDate::date)
                                 AND (DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month' - INTERVAL '1 day')::date
     AND b.busline_id IN ('P07', 'P08', 'P12')
-    ${classification ? `AND t02.classification::text IN (:classification)` : `AND t02.category IN ('A', 'B', 'C')`}
+    ${classification ? `AND t02.classification::text IN (:classification)` : `AND t02.classification IN ('A', 'B', 'C')`}
     ${sku ? `AND b.mapping_code::text IN (:sku)` : ""}
     ${branch ? `AND mtsa.branch_code::text IN (:branch)` : ""}
     GROUP BY t02.classification
@@ -65,7 +65,7 @@ ibl_primary_target AS (
     AND mtsa.sale_trg_date BETWEEN DATE_TRUNC('month', :endDate::date)
                                 AND (DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month' - INTERVAL '1 day')::date
     AND b.busline_id IN ('P07', 'P08', 'P12')
-    ${classification ? `AND t02.classification::text IN (:classification)` : `AND t02.category IN ('A', 'B', 'C')`}
+    ${classification ? `AND t02.classification::text IN (:classification)` : `AND t02.classification IN ('A', 'B', 'C')`}
     ${sku ? `AND b.mapping_code::text IN (:sku)` : ""}
     ${branch ? `AND mtsa.branch_code::text IN (:branch)` : ""}
     GROUP BY t02.classification

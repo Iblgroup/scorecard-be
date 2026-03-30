@@ -14,6 +14,7 @@ import serviceMeasure from './routes.service.measure.js';
 import dispatchVsOrder from './routes.dispatch.vs.order.js';
 import tgtVsActual from './routes.tgt.vs.actual.js';
 import filters from './routes.filters.js';
+import totalSku from './routes.total.sku.js';
 
 const router = express.Router();
 
@@ -33,5 +34,6 @@ router.use('/wip', wip);
 router.use('/rpm', rpm);
 router.use('/dispatch-vs-order', dispatchVsOrder);
 router.use('/filters', filters);
+router.use('/total-sku', totalSku);
     
 export default router;

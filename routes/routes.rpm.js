@@ -16,6 +16,7 @@ router.get("/", async (req, res) => {
     const sql = `
       SELECT
           sttd.materialname,
+          sttd.producttype,
           SUM(
               sttd.valuatedgrblocked        +
               sttd.valueunrestricted        +
@@ -28,13 +29,13 @@ router.get("/", async (req, res) => {
               sttd.valuerestricted          +
               sttd.valuetiedempties         +
               sttd.valuevaluatedgrblocked
-          )                                 AS total_value
+          ) AS total_value
       FROM vw_sap_tpkg_traw_data sttd
       WHERE sttd.executiondate = (SELECT MAX(sttd.executiondate) FROM vw_sap_tpkg_traw_data sttd
       WHERE sttd.executiondate BETWEEN :startDate AND :endDate)
       ${sku ? `AND sttd.product::text IN (SELECT sap_mapping_code::text FROM frg_dist_metric_prod_mapping WHERE sap_mapping_code::text IN (:sku))` : ""}
       ${classification ? `AND sttd.product::text IN (SELECT sap_mapping_code::text FROM frg_dist_metric_prod_mapping WHERE classification::text IN (:classification))` : ""}
-      GROUP BY sttd.materialname;
+      GROUP BY sttd.materialname,sttd.producttype;
     `;
 
     const replacements = {};
