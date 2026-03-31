@@ -7,9 +7,9 @@ router.get("/", async (req, res) => {
   try {
     const {
       endDate,
-      // classification,
-      // sku,
-      // branch,
+      classification,
+      sku,
+      branch,
     } = req.query;
 
     const sql = `
@@ -36,6 +36,7 @@ router.get("/", async (req, res) => {
           WHERE a.sale_trg_date >= DATE_TRUNC('month', :endDate::date) - INTERVAL '2 months'
             AND a.sale_trg_date <  DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month'
             AND b.busline_id IN ('P07', 'P08', 'P12')
+            ${branch ? `AND a.branch_code::text IN (:branch)` : ""}
           GROUP BY
               a.data_flag,
               a.item_code,
@@ -67,6 +68,9 @@ router.get("/", async (req, res) => {
           FROM data_
           LEFT OUTER JOIN itm_class a
               ON data_.mapping_code::text = a.sap_mapping_code::text
+          WHERE 1=1
+          ${classification ? `AND classification::text IN (:classification)` : ""}
+          ${sku ? `AND mapping_code::text IN (:sku)` : ""}
       )
       SELECT
           TO_CHAR(sale_month, 'Mon YYYY')                                     AS month,
@@ -90,6 +94,9 @@ router.get("/", async (req, res) => {
     `;
 
     const replacements = { endDate };
+    if (classification) replacements.classification = Array.isArray(classification) ? classification : [classification];
+    if (sku) replacements.sku = Array.isArray(sku) ? sku : [sku];
+    if (branch) replacements.branch = Array.isArray(branch) ? branch : [branch];
 
     const results = await db.sequelize.query(sql, {
       replacements,
