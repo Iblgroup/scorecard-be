@@ -35,14 +35,14 @@ group by
 a.item_code
 ,b.matnr_desc ,b.mapping_code 
 ,d.matnr_desc ,data_flag
-),itm_class as (select distinct sap_mapping_code,classification from frg_dist_metric_prod_mapping fdmpm )
+),itm_class as (select distinct sap_mapping_code,sap_code,classification from frg_dist_metric_prod_mapping fdmpm )
 , fdata as (select 
 data_flag,
 mapping_code item_code
 ,unq_item_desc item_desc,classification
 ,sale_qty,sale_val,inv_qty,inv_value,c_oasales,c_asales,trg_val
 from data_
-left outer join itm_class a on (data_.mapping_code::text=a.sap_mapping_code::text)
+left outer join itm_class a on (data_.item_code::text=a.sap_code::text)
 )
 select 
 coalesce(classification,'Others')classification ,count(distinct item_code)sku

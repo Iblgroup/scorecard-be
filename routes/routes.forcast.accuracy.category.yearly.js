@@ -48,6 +48,7 @@ router.get("/", async (req, res) => {
       itm_class AS (
           SELECT DISTINCT
               sap_mapping_code,
+              sap_code,
               classification
           FROM frg_dist_metric_prod_mapping
       ),
@@ -67,7 +68,7 @@ router.get("/", async (req, res) => {
               trg_val
           FROM data_
           LEFT OUTER JOIN itm_class a
-              ON data_.mapping_code::text = a.sap_mapping_code::text
+              ON data_.item_code::text = a.sap_code::text
           WHERE 1=1
           ${classification ? `AND classification::text IN (:classification)` : ""}
           ${sku ? `AND mapping_code::text IN (:sku)` : ""}
