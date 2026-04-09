@@ -8,7 +8,7 @@ router.get("/", async (req, res) => {
   try {
     const { classification, sku } = req.query;
     const sql = `
-select t01.classification ,count(*) from frg_dist_metric_prod_mapping t01
+select t01.classification ,count(*) from dist_metric_prod_mapping t01
 group by t01.classification;
     `;
     const replacements = {};

@@ -16,6 +16,7 @@ export const config = {
       keepAliveInitialDelayMillis: 10000,
       statement_timeout: 120000,   // kill query after 2 minutes
       idle_in_transaction_session_timeout: 120000,
+      options: `-c search_path=primary_secondary_sales_schm,public`,
     },
     pool: {
       max: 10,

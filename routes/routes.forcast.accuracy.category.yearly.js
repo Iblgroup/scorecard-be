@@ -13,85 +13,48 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     const sql = `
-      WITH data_ AS (
-          SELECT
-              a.data_flag,
-              a.item_code,
-              b.mapping_code,
-              b.matnr_desc                                                    AS item_desc,
-              d.matnr_desc                                                    AS unq_item_desc,
-              DATE_TRUNC('month', a.sale_trg_date)                            AS sale_month,
-              SUM(a.sale_qty)                                                 AS sale_qty,
-              SUM(a.sale_val)                                                 AS sale_val,
-              SUM(a.inv_qty)                                                  AS inv_qty,
-              SUM(a.inv_value)                                                AS inv_value,
-              SUM(a.c_oasales)                                                AS c_oasales,
-              SUM(a.c_asales)                                                 AS c_asales,
-              SUM(a.trg_val)                                                  AS trg_val
-          FROM mv_target_sales_aggregate_25_26 a
-          INNER JOIN frg_sap_items_detail b
-              ON a.item_code = b.matnr
-          INNER JOIN frg_sap_items_detail d
-              ON d.matnr = b.mapping_code
-          WHERE a.sale_trg_date >= DATE_TRUNC('month', :endDate::date) - INTERVAL '2 months'
-            AND a.sale_trg_date <  DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month'
-            AND b.busline_id IN ('P07', 'P08', 'P12')
-            ${branch ? `AND a.branch_code::text IN (:branch)` : ""}
-          GROUP BY
-              a.data_flag,
-              a.item_code,
-              b.matnr_desc,
-              b.mapping_code,
-              d.matnr_desc,
-              DATE_TRUNC('month', a.sale_trg_date)
-      ),
-      itm_class AS (
-          SELECT DISTINCT
-              sap_mapping_code,
-              sap_code,
-              classification
-          FROM frg_dist_metric_prod_mapping
-      ),
-      fdata AS (
-          SELECT
-              data_flag,
-              mapping_code                                                    AS item_code,
-              unq_item_desc                                                   AS item_desc,
-              classification,
-              sale_month,
-              sale_qty,
-              sale_val,
-              inv_qty,
-              inv_value,
-              c_oasales,
-              c_asales,
-              trg_val
-          FROM data_
-          LEFT OUTER JOIN itm_class a
-              ON data_.item_code::text = a.sap_code::text
-          WHERE 1=1
-          ${classification ? `AND classification::text IN (:classification)` : ""}
-          ${sku ? `AND mapping_code::text IN (:sku)` : ""}
-      )
-      SELECT
-          TO_CHAR(sale_month, 'Mon YYYY')                                     AS month,
-          classification,
-          CASE WHEN new_total_all_sales = 0 THEN 0
-               ELSE new_total_all_sales / NULLIF(trg_val, 0)
-          END                                                                 AS forecast_accuracy_pct,
-          new_total_all_sales,
-          trg_val                                                             AS period_sales_trg_ibl_primary
-      FROM (
-          SELECT
-              sale_month,
-              classification,
-              SUM(CASE WHEN data_flag = 'SD'  THEN sale_val       ELSE 0 END) +
-              SUM(CASE WHEN data_flag = 'OPS' THEN c_oasales * -1 ELSE 0 END) AS new_total_all_sales,
-              SUM(trg_val)                                                    AS trg_val
-          FROM fdata
-          GROUP BY sale_month, classification
-      ) a
-      ORDER BY sale_month, classification;
+    WITH filtered_sales AS (
+        SELECT
+            DATE_TRUNC('month', t01.billing_date) AS sale_month,
+            item_code,
+            SUM(gross_amount) gross_amount
+        FROM mv_tscl_data_2025_26 t01
+        INNER JOIN sap_items_detail t02 ON (t01.item_code = t02.matnr)
+        LEFT OUTER JOIN dist_metric_prod_mapping t03 ON (t03.sap_code = t01.item_code)
+        WHERE t01.billing_date >= DATE_TRUNC('month', :endDate::date) - INTERVAL '2 months'
+          AND t01.billing_date <  DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month'
+        ${sku ? `AND t01.item_code::text IN (:sku)` : ""}
+        ${classification ? `AND t03.classification::text IN (:classification)` : ""}
+        GROUP BY DATE_TRUNC('month', t01.billing_date), item_code
+    ),
+    filtered_targets AS (
+        SELECT
+            DATE_TRUNC('month', t01.target_date) AS sale_month,
+            t01.material_code,
+            SUM(t01.efp*t01.value) trg
+        FROM tscl_sap_targets t01
+        INNER JOIN sap_items_detail t02 ON (t01.material_code::text = t02.matnr::text)
+        LEFT OUTER JOIN dist_metric_prod_mapping t03 ON (t03.sap_code::text = t01.material_code::text)
+        WHERE t01.target_date >= DATE_TRUNC('month', :endDate::date) - INTERVAL '2 months'
+          AND t01.target_date <  DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month'
+        ${sku ? `AND t01.material_code::text IN (:sku)` : ""}
+        ${classification ? `AND t03.classification::text IN (:classification)` : ""}
+        GROUP BY DATE_TRUNC('month', t01.target_date), t01.material_code
+    )
+    SELECT
+        TO_CHAR(fs.sale_month, 'Mon YYYY') AS month,
+        COALESCE(t03.classification, 'Others') classification,
+        SUM(fs.gross_amount) new_total_all_sales,
+        SUM(ft.trg) budget,
+        ROUND((SUM(fs.gross_amount)/NULLIF(SUM(ft.trg),0)*100)::numeric,2) budget_accuracy_pct
+    FROM filtered_sales fs
+    LEFT JOIN sap_items_detail t02 ON fs.item_code = t02.matnr
+    LEFT JOIN dist_metric_prod_mapping t03 ON t03.sap_code = fs.item_code
+    LEFT JOIN filtered_targets ft ON fs.item_code::text = ft.material_code::text AND fs.sale_month = ft.sale_month
+    WHERE 1=1
+    ${branch ? `AND t03.classification::text IN (:branch)` : ""}
+    GROUP BY fs.sale_month, t03.classification
+    ORDER BY fs.sale_month, t03.classification;
     `;
 
     const replacements = { endDate };
@@ -103,10 +66,10 @@ router.get("/", async (req, res) => {
       replacements,
       type: db.sequelize.QueryTypes.SELECT,
     });
-    console.log(`Fetched ${results.length} records from forecast accuracy category yearly`);
+    console.log(`Fetched ${results.length} records from forecast accuracy category monthly`);
     res.json({ success: true, count: results.length, data: results });
   } catch (error) {
-    console.error("Error fetching forecast accuracy category yearly:", error);
+    console.error("Error fetching forecast accuracy category monthly:", error);
     res.status(500).json({
       success: false,
       message: "Error fetching data",

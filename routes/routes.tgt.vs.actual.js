@@ -6,7 +6,6 @@ const router = express.Router();
 router.get("/", async (req, res) => {
   try {
     const {
-      startDate,
       endDate,
       classification,
       sku,
@@ -14,88 +13,64 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     const sql = `
-     WITH closing_inv AS (
+    WITH stk AS (
+        SELECT
+            dmpm.classification,
+            SUM(dsmh.qty * dsmh.item_cost)                                  AS inv_val
+        FROM daily_stock_movement_history dsmh
+        LEFT OUTER JOIN dist_metric_prod_mapping dmpm
+            ON dmpm.sap_code::TEXT =
+               CASE
+                   WHEN dsmh.item_code NOT LIKE 'F%' THEN (dsmh.item_code::bigint)::TEXT
+                   ELSE dsmh.item_code
+               END
+        WHERE dsmh.stock_opening_date = (DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month' - INTERVAL '1 day')::date
+        AND dsmh.busline_code IN ('P07','P08','P12')
+        AND dsmh.subinventory_code LIKE '80%'
+        AND dsmh.qty <> 0
+        ${sku ? `AND dmpm.sap_code::text IN (:sku)` : ""}
+        ${branch ? `AND dsmh.subinventory_code::text IN (:branch)` : ""}
+        ${classification ? `AND dmpm.classification::text IN (:classification)` : ""}
+        GROUP BY dmpm.classification
+    ),
+    filtered_targets AS (
+        SELECT
+            t03.classification,
+            SUM(t01.target_value)                                           AS trg_value
+        FROM mv_tscl_spl_target t01
+        LEFT OUTER JOIN dist_metric_prod_mapping t03 ON t03.sap_code::TEXT = t01.item_code::TEXT
+        WHERE t01.target_date BETWEEN DATE_TRUNC('month', :endDate::date)
+          AND (DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month' - INTERVAL '1 day')::date
+        ${sku ? `AND t01.item_code::text IN (:sku)` : ""}
+        ${branch ? `AND t01.loc_code::text IN (:branch)` : ""}
+        ${classification ? `AND t03.classification::text IN (:classification)` : ""}
+        GROUP BY t03.classification
+    ),
+    days_calc AS (
+        SELECT EXTRACT(DAY FROM (DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month' - INTERVAL '1 day')::date) AS total_days_in_month
+    )
     SELECT
-        t02.classification,
+        ft.classification,
         CASE
-            WHEN ABS(COALESCE(SUM(mtsa.inv_value), 0)) < 0.001 THEN 0
-            ELSE COALESCE(SUM(mtsa.inv_value), 0)
-        END                                                             AS Closing_Inventory_IBL
-    FROM mv_target_sales_aggregate_25_26 mtsa
-    INNER JOIN frg_sap_items_detail b ON mtsa.item_code = b.matnr
-    INNER JOIN frg_sap_items_detail d ON d.matnr = b.mapping_code
-    LEFT JOIN frg_dist_metric_prod_mapping t02
-        ON mtsa.item_code::text = t02.sap_code::text
-    WHERE mtsa.data_flag = 'OPS'
-    AND mtsa.sale_trg_date <= :endDate
-    AND b.busline_id IN ('P07', 'P08', 'P12')
-    ${classification ? `AND t02.classification::text IN (:classification)` : `AND t02.classification IN ('A', 'B', 'C')`}
-    ${sku ? `AND b.mapping_code::text IN (:sku)` : ""}
-    ${branch ? `AND mtsa.branch_code::text IN (:branch)` : ""}
-    GROUP BY t02.classification
-),
-ibl_direct_target AS (
-    SELECT
-        t02.classification,
-        COALESCE(SUM(mtsa.trg_val), 0)                                  AS IBL_Direct_Month_Target
-    FROM mv_target_sales_aggregate_25_26 mtsa
-    INNER JOIN frg_sap_items_detail b ON mtsa.item_code = b.matnr
-    INNER JOIN frg_sap_items_detail d ON d.matnr = b.mapping_code
-    LEFT JOIN frg_dist_metric_prod_mapping t02
-        ON mtsa.item_code::text = t02.sap_code::text
-    WHERE mtsa.data_flag = 'OPS'
-    AND mtsa.sale_trg_date BETWEEN DATE_TRUNC('month', :endDate::date)
-                                AND (DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month' - INTERVAL '1 day')::date
-    AND b.busline_id IN ('P07', 'P08', 'P12')
-    ${classification ? `AND t02.classification::text IN (:classification)` : `AND t02.classification IN ('A', 'B', 'C')`}
-    ${sku ? `AND b.mapping_code::text IN (:sku)` : ""}
-    ${branch ? `AND mtsa.branch_code::text IN (:branch)` : ""}
-    GROUP BY t02.classification
-),
-ibl_primary_target AS (
-    SELECT
-        t02.classification,
-        COALESCE(SUM(mtsa.trg_val), 0)                                  AS IBL_Primary_Month_Target
-    FROM mv_target_sales_aggregate_25_26 mtsa
-    INNER JOIN frg_sap_items_detail b ON mtsa.item_code = b.matnr
-    INNER JOIN frg_sap_items_detail d ON d.matnr = b.mapping_code
-    LEFT JOIN frg_dist_metric_prod_mapping t02
-        ON mtsa.item_code::text = t02.sap_code::text
-    WHERE mtsa.data_flag = 'SD'
-    AND mtsa.sale_trg_date BETWEEN DATE_TRUNC('month', :endDate::date)
-                                AND (DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month' - INTERVAL '1 day')::date
-    AND b.busline_id IN ('P07', 'P08', 'P12')
-    ${classification ? `AND t02.classification::text IN (:classification)` : `AND t02.classification IN ('A', 'B', 'C')`}
-    ${sku ? `AND b.mapping_code::text IN (:sku)` : ""}
-    ${branch ? `AND mtsa.branch_code::text IN (:branch)` : ""}
-    GROUP BY t02.classification
-),
-days_calc AS (
-    SELECT
-        EXTRACT(DAY FROM (DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month' - INTERVAL '1 day')::date) AS total_days_in_month
-)
-SELECT
-    ci.classification,
-    CASE
-        WHEN ci.classification = 'A' THEN 30
-        WHEN ci.classification = 'B' THEN 20
-        WHEN ci.classification = 'C' THEN 15
-    END                                                                 AS cover_days_tgt,
-    ROUND(
-        COALESCE(ci.Closing_Inventory_IBL, 0)::numeric /
-        NULLIF(
-            (d.IBL_Direct_Month_Target + p.IBL_Primary_Month_Target)::numeric /
-            NULLIF(dc.total_days_in_month, 0)
-        , 0)
-    , 1)                                                                AS actual_cover_days
-FROM closing_inv ci
-LEFT JOIN ibl_direct_target d   ON ci.classification = d.classification
-LEFT JOIN ibl_primary_target p  ON ci.classification = p.classification
-CROSS JOIN days_calc dc
-ORDER BY ci.classification;
+            WHEN ft.classification = 'A' THEN 30
+            WHEN ft.classification = 'B' THEN 20
+            WHEN ft.classification = 'C' THEN 15
+        END                                                                 AS cover_days_tgt,
+        ROUND(
+            COALESCE(s.inv_val, 0)::numeric /
+            NULLIF(
+                ft.trg_value::numeric /
+                NULLIF(dc.total_days_in_month, 0)
+            , 0)
+        , 1)                                                                AS actual_cover_days
+    FROM filtered_targets ft
+    LEFT JOIN stk s ON ft.classification = s.classification
+    CROSS JOIN days_calc dc
+    WHERE ft.classification IN ('A','B','C')
+    ORDER BY ft.classification;
     `;
 
-    const replacements = { startDate, endDate };
+    const replacements = { endDate };
     if (branch) replacements.branch = Array.isArray(branch) ? branch : [branch];
     if (classification) replacements.classification = Array.isArray(classification) ? classification : [classification];
     if (sku) replacements.sku = Array.isArray(sku) ? sku : [sku];
@@ -104,10 +79,10 @@ ORDER BY ci.classification;
       replacements,
       type: db.sequelize.QueryTypes.SELECT,
     });
-    console.log(`Fetched ${results.length} records from tgt_vs_actual`);
+    console.log(`Fetched ${results.length} records from tgt vs actual`);
     res.json({ success: true, count: results.length, data: results });
   } catch (error) {
-    console.error("Error fetching summary:", error);
+    console.error("Error fetching tgt vs actual:", error);
     res.status(500).json({
       success: false,
       message: "Error fetching data",

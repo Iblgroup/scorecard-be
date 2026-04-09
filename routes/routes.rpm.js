@@ -16,26 +16,39 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     const sql = `
-      SELECT
-          sttd.materialname,
-          sttd.producttype,
-          SUM(
-              sttd.valuatedgrblocked        +
-              sttd.valueunrestricted        +
-              sttd.valuequalityinspection   +
-              sttd.valuereturns             +
-              sttd.valuestktransferstloc    +
-              sttd.valuestocktransferplant  +
-              sttd.valuestockintransit      +
-              sttd.valueblocked             +
-              sttd.valuerestricted          +
-              sttd.valuetiedempties         +
-              sttd.valuevaluatedgrblocked
-          ) AS total_value
-      FROM vw_sap_tpkg_traw_data sttd
-      WHERE sttd.executiondate = (SELECT MAX(sttd.executiondate) FROM vw_sap_tpkg_traw_data sttd
-      WHERE sttd.executiondate BETWEEN :startDate AND :endDate)
-      GROUP BY sttd.materialname,sttd.producttype;
+    SELECT
+        sttd.materialname,
+        sttd.producttype ,
+        SUM(
+            sttd.valuatedgrblocked        +
+            sttd.valueunrestricted        +
+            sttd.valuequalityinspection   +
+            sttd.valuereturns             +
+            sttd.valuestktransferstloc    +
+            sttd.valuestocktransferplant  +
+            sttd.valuestockintransit      +
+            sttd.valueblocked             +
+            sttd.valuerestricted          +
+            sttd.valuetiedempties         +
+            sttd.valuevaluatedgrblocked
+        )                                                                   AS total_value
+    FROM sap_tpkg_traw_data sttd
+    WHERE sttd.executiondate = (
+        SELECT MAX(sttd.executiondate)
+        FROM sap_tpkg_traw_data sttd
+        WHERE sttd.executiondate BETWEEN :startDate AND :endDate
+    )
+    --AND sttd.product::text IN (
+    --    SELECT sap_mapping_code::text
+    --    FROM frg_dist_metric_prod_mapping
+    --    WHERE sap_mapping_code::text IN ('1019001615')                    -- SKU filter
+    --)
+    --AND sttd.product::text IN (
+    --    SELECT sap_mapping_code::text
+    --    FROM frg_dist_metric_prod_mapping
+    --    WHERE classification::text IN ('A', 'B', 'C')                    -- Classification filter
+    --)
+    GROUP BY sttd.materialname,sttd.producttype;
     `;
 
     const replacements = {};

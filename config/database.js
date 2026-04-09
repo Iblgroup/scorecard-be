@@ -14,6 +14,10 @@ const sequelize = new Sequelize(
   }
 );
 
+sequelize.afterConnect(async (connection) => {
+  await connection.query(`SET search_path TO primary_secondary_sales_schm, public`);
+});
+
 // Test database connection
 export const testConnection = async () => {
   try {
