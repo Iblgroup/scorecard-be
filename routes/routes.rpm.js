@@ -31,7 +31,10 @@ router.get("/", async (req, res) => {
             sttd.valuerestricted          +
             sttd.valuetiedempties         +
             sttd.valuevaluatedgrblocked
-        )                                                                   AS total_value
+        )                                                                   AS total_value,
+        SUM(sttd.valuestktransferstloc)                                     AS storage_location,
+        SUM(sttd.valuerestricted)                                           AS restricted,
+        SUM(sttd.valueunrestricted)                                         AS unrestricted
     FROM sap_tpkg_traw_data sttd
     WHERE sttd.executiondate = (
         SELECT MAX(sttd.executiondate)
