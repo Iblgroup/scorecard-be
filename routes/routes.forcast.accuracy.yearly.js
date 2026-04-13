@@ -14,34 +14,34 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     const sql = `
-    WITH filtered_sales AS (
-        SELECT item_code, SUM(gross_amount) gross_amount
-        FROM mv_tscl_data_2025_26 t01
-        INNER JOIN sap_items_detail t02 ON (t01.item_code = t02.matnr)
-        LEFT OUTER JOIN dist_metric_prod_mapping t03 ON (t03.sap_code = t01.item_code)
-        WHERE billing_date BETWEEN :startDate AND :endDate
-        ${branch ? `AND a.branch_code::text IN (:branch)` : ""}
-        ${sku ? `AND t01.item_code::text IN (:sku)` : ""}
-        ${classification ? `AND t03.classification::text IN (:classification)` : ""}
-        GROUP BY item_code
-    ),
-    filtered_targets AS (
-        SELECT t01.material_code, SUM(t01.efp*t01.value) trg
-        FROM tscl_sap_targets t01
-        INNER JOIN sap_items_detail t02 ON (t01.material_code::text = t02.matnr::text)
-        LEFT OUTER JOIN dist_metric_prod_mapping t03 ON (t03.sap_code::text = t01.material_code::text)
-        WHERE target_date BETWEEN :startDate AND :endDate
-        ${branch ? `AND a.branch_code::text IN (:branch)` : ""}
-        ${sku ? `AND t01.material_code::text IN (:sku)` : ""}
-        ${classification ? `AND t03.classification::text IN (:classification)` : ""}
-        GROUP BY material_code
-    )
-    SELECT SUM(fs.gross_amount) new_total_all_sales, SUM(ft.trg) budget,
-    ROUND((SUM(fs.gross_amount)/NULLIF(SUM(ft.trg),0)*100)::numeric,2) budget_accuracy_pct
-    FROM filtered_sales fs
-    LEFT JOIN sap_items_detail t02 ON fs.item_code=t02.matnr
-    LEFT JOIN dist_metric_prod_mapping t03 ON t03.sap_code=fs.item_code
-    LEFT JOIN filtered_targets ft ON fs.item_code::text=ft.material_code::text;
+      WITH sale AS (
+          SELECT
+              SUM(amount) AS amount,
+              0           AS target_value
+          FROM vw_mv_tscl_data_ a
+          WHERE a.billing_date BETWEEN :startDate AND :endDate
+          GROUP BY a.classification
+          UNION ALL
+          SELECT
+              0                   AS amount,
+              SUM(value)   AS target_value
+          FROM mv_tscl_budget b
+          WHERE b.target_date::date BETWEEN :startDate AND :endDate
+              and COALESCE(b.classification, 'Others')  = COALESCE(b.classification, 'Others')  
+        and  b.item_code = b.item_code
+      )
+      SELECT
+          SUM(amount)                                 AS amount,
+          SUM(target_value)                           AS target_value,
+          CASE
+              WHEN SUM(amount)       <> 0
+              AND SUM(target_value) <> 0
+              THEN ROUND(
+                      (SUM(amount) / SUM(target_value) * 100)::numeric  -- ✅ cast to numeric
+                  , 2)
+              ELSE 0
+          END                                         AS pct
+      FROM sale a;
     `;
 
     const replacements = { startDate, endDate };

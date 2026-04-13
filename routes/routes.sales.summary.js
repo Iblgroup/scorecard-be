@@ -14,15 +14,29 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     const sql = `
-    select coalesce(t03.classification,'Others') classification ,count(distinct item_code) sku ,sum(gross_amount) new_total_all_sales
-    from mv_tscl_data_2025_26 t01
-    inner join sap_items_detail t02 on (t01.item_code = t02.matnr)
-    left outer join dist_metric_prod_mapping t03 on (t03.sap_code = t01.item_code)
-    where billing_date BETWEEN :startDate AND :endDate
-    ${branch ? `AND a.branch_code::text IN (:branch)` : ""}
-    ${classification ? `AND classification::text IN (:classification)` : ""}
-    ${sku ? `AND item_code::text IN (:sku)` : ""}
-    group by classification ;
+      with sale as (
+      select
+        count(distinct a.item_code) sku,
+        a.classification ,
+      --    a.data_flag,billing_date, item_code,
+      --    a.branch_id,
+          SUM(amount) AS amount,0 target_value
+      FROM vw_mv_tscl_data_ a
+      WHERE a.billing_date BETWEEN :startDate AND :endDate
+      and a.classification = a.classification and
+      a.branch_id = a.branch_id and  item_code = item_code
+      group by a.classification
+      --    AND a.item_code = '1013000071'
+      --    AND a.branch_id = '8001'
+      --    AND a.data_flag = 'Secondary Sales'
+      )
+      select
+      a.classification,
+      a.sku
+      ,sum(amount)amount
+      from sale a
+      group by a.classification,a.sku
+      ;
     `;
 
     const replacements = { startDate, endDate };
