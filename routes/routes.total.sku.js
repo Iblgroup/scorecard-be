@@ -8,8 +8,8 @@ router.get("/", async (req, res) => {
   try {
     const { classification, sku } = req.query;
     const sql = `
-select t01.classification ,count(*) from dist_metric_prod_mapping t01
-group by t01.classification;
+      select t01.classification ,count(*) from dist_metric_prod_mapping t01
+      group by t01.classification;
     `;
     const replacements = {};
     if (classification) replacements.classification = Array.isArray(classification) ? classification : [classification];

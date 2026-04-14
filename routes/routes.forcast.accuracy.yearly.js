@@ -37,10 +37,10 @@ router.get("/", async (req, res) => {
               WHEN SUM(amount)       <> 0
               AND SUM(target_value) <> 0
               THEN ROUND(
-                      (SUM(amount) / SUM(target_value) * 100)::numeric  -- ✅ cast to numeric
+                      (SUM(amount) / SUM(target_value))::numeric
                   , 2)
               ELSE 0
-          END                                         AS pct
+          END AS pct
       FROM sale a;
     `;
 

@@ -8,7 +8,11 @@ router.get("/", async (req, res) => {
   try {
     const { classification, sku } = req.query;
     const sql = `
-select dmpm.sap_code , dmpm.item_desc ,dmpm.classification  from dist_metric_prod_mapping dmpm ;
+      select 
+      distinct material_code item_code,sid.matnr_desc item_description
+      ,coalesce(classif,'Others') classification
+      from tscl_sap_targets tst
+      left outer join sap_items_detail sid on sid.matnr =tst.material_code::text ;
     `;
     const replacements = {};
     if (classification) replacements.classification = Array.isArray(classification) ? classification : [classification];
@@ -33,7 +37,9 @@ router.get("/branches", async (req, res) => {
   try {
     const { classification, sku } = req.query;
     const sql = `
-select distinct sil.sale_loc ,sil.sale_loc_desc  from sales_inv_locations sil ;
+      select distinct 
+      branch_id,branch_desc
+      from sap_locations where branch_id like '80%';
     `;
     const replacements = {};
     if (classification) replacements.classification = Array.isArray(classification) ? classification : [classification];

@@ -13,61 +13,65 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     const sql = `
-    WITH stk AS (
-        SELECT
-            dmpm.classification,
-            SUM(dsmh.qty * dsmh.item_cost)                                  AS inv_val
-        FROM daily_stock_movement_history dsmh
-        LEFT OUTER JOIN dist_metric_prod_mapping dmpm
-            ON dmpm.sap_code::TEXT =
-               CASE
-                   WHEN dsmh.item_code NOT LIKE 'F%' THEN (dsmh.item_code::bigint)::TEXT
-                   ELSE dsmh.item_code
-               END
-        WHERE dsmh.stock_opening_date = (DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month' - INTERVAL '1 day')::date
-        AND dsmh.busline_code IN ('P07','P08','P12')
-        AND dsmh.subinventory_code LIKE '80%'
-        AND dsmh.qty <> 0
-        ${sku ? `AND dmpm.sap_code::text IN (:sku)` : ""}
-        ${branch ? `AND dsmh.subinventory_code::text IN (:branch)` : ""}
-        ${classification ? `AND dmpm.classification::text IN (:classification)` : ""}
-        GROUP BY dmpm.classification
-    ),
-    filtered_targets AS (
-        SELECT
-            t03.classification,
-            SUM(t01.target_value)                                           AS trg_value
-        FROM mv_tscl_spl_target t01
-        LEFT OUTER JOIN dist_metric_prod_mapping t03 ON t03.sap_code::TEXT = t01.item_code::TEXT
-        WHERE t01.target_date BETWEEN DATE_TRUNC('month', :endDate::date)
-          AND (DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month' - INTERVAL '1 day')::date
-        ${sku ? `AND t01.item_code::text IN (:sku)` : ""}
-        ${branch ? `AND t01.loc_code::text IN (:branch)` : ""}
-        ${classification ? `AND t03.classification::text IN (:classification)` : ""}
-        GROUP BY t03.classification
-    ),
-    days_calc AS (
-        SELECT EXTRACT(DAY FROM (DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month' - INTERVAL '1 day')::date) AS total_days_in_month
-    )
+WITH stk AS (
+    select
+    dmpm.classification ,
+        SUM(dsmh.qty * dsmh.item_cost)                                  AS inv_val
+    FROM daily_stock_movement_history dsmh
+    LEFT OUTER JOIN dist_prod_mapping_temp  dmpm
+        ON dmpm.mapping_code::TEXT =
+           CASE
+               WHEN item_code NOT LIKE 'F%' THEN (dsmh.item_code::int)::TEXT
+               ELSE dsmh.item_code
+           END
+    LEFT OUTER JOIN sales_inv_locations sil ON sil.inv_sloc::TEXT = subinventory_code
+    WHERE dsmh.stock_opening_date = CAST(:endDate AS date)
+    AND dsmh.busline_code IN ('P07','P08','P12')
+    AND dsmh.subinventory_code LIKE '80%'
+--    AND dsmh.item_code LIKE '%1013000025%'
+--    and sil.inv_sloc = 8028
+    AND qty <> 0
+    group by dmpm.classification
+),
+filtered_targets AS (
     SELECT
-        ft.classification,
+    t03.classification ,
+    SUM(t01.target_value)                                        AS trg_value
+    FROM mv_tscl_spl_target t01
+    LEFT OUTER JOIN dist_metric_prod_mapping t03 ON t03.sap_code::text = t01.item_code::text
+    WHERE t01.target_date >= DATE_TRUNC('month', CAST(:endDate AS date))
+      AND t01.target_date < DATE_TRUNC('month', CAST(:endDate AS date)) + INTERVAL '1 month'
+--    and t03.sap_code = '1013000025'
+--    AND t01.loc_code = '8028'
+    group by  t03.classification
+),
+days_calc AS (
+    SELECT EXTRACT(DAY FROM (
+        DATE_TRUNC('month', CAST(:endDate AS date)) + INTERVAL '1 month - 1 day'
+    ))::int AS total_days_in_month
+)
+select
+	s.classification,
+    CASE
+        WHEN ft.classification = 'A' THEN 30
+        WHEN ft.classification = 'B' THEN 20
+        WHEN ft.classification = 'C' THEN 15
+    END                                                                 AS cover_days_tgt,
+    ROUND(
         CASE
-            WHEN ft.classification = 'A' THEN 30
-            WHEN ft.classification = 'B' THEN 20
-            WHEN ft.classification = 'C' THEN 15
-        END                                                                 AS cover_days_tgt,
-        ROUND(
-            COALESCE(s.inv_val, 0)::numeric /
-            NULLIF(
-                ft.trg_value::numeric /
-                NULLIF(dc.total_days_in_month, 0)
-            , 0)
-        , 1)                                                                AS actual_cover_days
-    FROM filtered_targets ft
-    LEFT JOIN stk s ON ft.classification = s.classification
-    CROSS JOIN days_calc dc
-    WHERE ft.classification IN ('A','B','C')
-    ORDER BY ft.classification;
+            WHEN ABS(COALESCE(s.inv_val, 0)) < 0.001 THEN 0
+            ELSE COALESCE(s.inv_val, 0)
+        END::numeric /
+        NULLIF(
+            ft.trg_value::numeric /
+            NULLIF(dc.total_days_in_month, 0)
+        , 0)
+    , 1)                                                                AS cover_days
+FROM filtered_targets ft
+LEFT JOIN stk s ON ft.classification = s.classification
+CROSS JOIN days_calc dc
+WHERE ft.classification IN ('A','B','C')
+ORDER BY ft.classification;
     `;
 
     const replacements = { endDate };

@@ -6,6 +6,7 @@ const router = express.Router();
 router.get("/", async (req, res) => {
   try {
     const {
+      startDate,
       endDate,
       classification,
       sku,
@@ -13,81 +14,64 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     const sql = `
-    WITH sku_base AS (
-        SELECT
-            dmpm.sap_code,
-            dmpm.classification
-        FROM dist_metric_prod_mapping dmpm
-        WHERE dmpm.classification IN ('A','B','C')
-        ${classification ? `AND dmpm.classification::text IN (:classification)` : ""}
-        ${sku ? `AND dmpm.sap_code::text IN (:sku)` : ""}
-    ),
-    inv_value AS (
-        SELECT
-            CASE
-                WHEN dsmh.item_code NOT LIKE 'F%' THEN (dsmh.item_code::bigint)::TEXT
-                ELSE dsmh.item_code
-            END                                                             AS item_code_clean,
-            SUM(COALESCE(dsmh.qty, 0) * COALESCE(dsmh.item_cost, 0))        AS total_inv_val
+        WITH sku_base AS (
+        SELECT DISTINCT TRIM(mapping_code) AS mapping_code, classification
+        FROM dist_prod_mapping_temp
+        WHERE classification IN ('A','B','C')
+        ),
+        inv_value AS (
+        SELECT TRIM(dmpm.mapping_code) AS mapping_code,
+        SUM(dsmh.qty * dsmh.trade_price) AS inv_val
         FROM daily_stock_movement_history dsmh
-        WHERE dsmh.stock_opening_date = (DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month' - INTERVAL '1 day')::date
+        LEFT JOIN dist_prod_mapping_temp dmpm
+        ON TRIM(dmpm.mapping_code)=TRIM(CASE WHEN dsmh.item_code NOT LIKE 'F%' THEN (dsmh.item_code::bigint)::TEXT ELSE dsmh.item_code END)
+        WHERE dsmh.stock_opening_date=(
+        SELECT MAX(stock_opening_date)
+        FROM daily_stock_movement_history d
+        WHERE d.stock_opening_date BETWEEN :startDate AND :endDate
+        AND d.busline_code IN ('P07','P08','P12')
+        )
         AND dsmh.busline_code IN ('P07','P08','P12')
         AND dsmh.subinventory_code LIKE '80%'
-        ${branch ? `AND dsmh.subinventory_code::text IN (:branch)` : ""}
-        GROUP BY 1
-    ),
-    filtered_targets AS (
-        SELECT
-            t03.sap_code::TEXT                                              AS sap_code,
-            SUM(t01.target_value)                                           AS total_trg_value
+        --dsmh.subinventory_code = '8006'
+        GROUP BY TRIM(dmpm.mapping_code)
+        ),
+        filtered_targets AS (
+        SELECT TRIM(t03.mapping_code) AS mapping_code,
+        SUM(t01.target_value) AS trg_value
         FROM mv_tscl_spl_target t01
-        LEFT OUTER JOIN dist_metric_prod_mapping t03 ON t03.sap_code::TEXT = t01.item_code::TEXT
-        WHERE t01.target_date BETWEEN DATE_TRUNC('month', :endDate::date)
-          AND (DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month' - INTERVAL '1 day')::date
-        ${branch ? `AND t01.loc_code::text IN (:branch)` : ""}
-        GROUP BY 1
-    ),
-    days_calc AS (
-        SELECT EXTRACT(DAY FROM (DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month' - INTERVAL '1 day')::date) AS total_days_in_month
-    ),
-    sku_summary AS (
-        SELECT
-            sb.sap_code,
-            sb.classification,
-            COALESCE(iv.total_inv_val, 0)                                   AS actual_inv,
-            COALESCE(ft.total_trg_value, 0)                                 AS actual_trg,
-            ROUND(
-                COALESCE(iv.total_inv_val, 0)::numeric /
-                NULLIF(
-                    COALESCE(ft.total_trg_value, 0)::numeric /
-                    NULLIF(dc.total_days_in_month, 0)
-                , 0)
-            , 1)                                                            AS final_cover_days
+        LEFT JOIN dist_prod_mapping_temp t03
+        ON TRIM(t03.mapping_code)=TRIM(t01.item_code)
+        WHERE DATE_TRUNC('month',t01.target_date)=DATE_TRUNC('month',CAST(:endDate AS date))
+        --and t01.loc_code = '8006'
+        GROUP BY TRIM(t03.mapping_code)
+        ),
+        days_calc AS (
+        SELECT EXTRACT(DAY FROM (DATE_TRUNC('month',CAST(:endDate AS date))+INTERVAL '1 month - 1 day'))::int AS total_days
+        ),
+        sku_summary AS (
+        SELECT sb.mapping_code,sb.classification,
+        COALESCE(iv.inv_val,0) AS total_inv,
+        COALESCE(ft.trg_value,0) AS total_trg,
+        ROUND(COALESCE(iv.inv_val,0)::numeric/NULLIF(COALESCE(ft.trg_value,0)::numeric/dc.total_days,0),1) AS cover_days
         FROM sku_base sb
-        LEFT JOIN inv_value iv ON sb.sap_code = iv.item_code_clean
-        LEFT JOIN filtered_targets ft ON sb.sap_code = ft.sap_code
+        LEFT JOIN inv_value iv ON sb.mapping_code=iv.mapping_code
+        LEFT JOIN filtered_targets ft ON sb.mapping_code=ft.mapping_code
         CROSS JOIN days_calc dc
-    )
-    SELECT
-        classification,
-        COUNT(DISTINCT CASE
-            WHEN (classification = 'A' AND COALESCE(final_cover_days, 0) > 30) OR
-                 (classification = 'B' AND COALESCE(final_cover_days, 0) > 20) OR
-                 (classification = 'C' AND COALESCE(final_cover_days, 0) > 15)
-            THEN sap_code
-        END) AS "No Of SKUs > Threshold",
-        COUNT(DISTINCT CASE
-            WHEN (classification = 'A' AND (COALESCE(final_cover_days, 0) <= 30 OR actual_inv = 0)) OR
-                 (classification = 'B' AND (COALESCE(final_cover_days, 0) <= 20 OR actual_inv = 0)) OR
-                 (classification = 'C' AND (COALESCE(final_cover_days, 0) <= 15 OR actual_inv = 0))
-            THEN sap_code
-        END) AS "No Of SKUs < Threshold"
-    FROM sku_summary
-    GROUP BY classification
-    ORDER BY classification;
+        )
+        SELECT classification,
+        COUNT(CASE WHEN classification='A' AND cover_days>30 THEN 1
+        WHEN classification='B' AND cover_days>20 THEN 1
+        WHEN classification='C' AND cover_days>15 THEN 1 END) AS "No Of SKUs > Threshold",
+        COUNT(CASE WHEN classification='A' AND cover_days<=30 THEN 1
+        WHEN classification='B' AND cover_days<=20 THEN 1
+        WHEN classification='C' AND cover_days<=15 THEN 1 END) AS "No Of SKUs < Threshold"
+        FROM sku_summary
+        GROUP BY classification
+        ORDER BY classification;
     `;
 
-    const replacements = { endDate };
+    const replacements = { startDate, endDate };
     if (classification) replacements.classification = Array.isArray(classification) ? classification : [classification];
     if (sku) replacements.sku = Array.isArray(sku) ? sku : [sku];
     if (branch) replacements.branch = Array.isArray(branch) ? branch : [branch];
