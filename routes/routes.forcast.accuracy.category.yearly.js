@@ -18,7 +18,7 @@ router.get("/", async (req, res) => {
         a.classification,
         DATE_TRUNC('month', a.billing_date) AS month_date,
         TO_CHAR(DATE_TRUNC('month', a.billing_date), 'FMMonth YYYY') AS month,
-        SUM(amount) AS amount,
+        SUM(a.sold_qty * a.efp) AS amount,
         0           AS target_value
     FROM vw_mv_tscl_data_ a
     WHERE a.billing_date >= DATE_TRUNC('month', :endDate::date) - INTERVAL '2 months'

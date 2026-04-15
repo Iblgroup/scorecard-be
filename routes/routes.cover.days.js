@@ -18,7 +18,7 @@ WITH stk AS (
         COALESCE(dmpm.classification, 'Others') AS classification,
         SUM(dsmh.qty * dsmh.trade_price) AS inv_val
     FROM daily_stock_movement_history dsmh
-    LEFT OUTER JOIN dist_prod_mapping_temp  dmpm
+    LEFT OUTER JOIN vw_items_class  dmpm
         ON dmpm.mapping_code::TEXT =
            CASE
                WHEN item_code NOT LIKE 'F%' THEN (dsmh.item_code::int)::TEXT
@@ -39,7 +39,7 @@ filtered_targets AS (
     COALESCE(t03.classification, 'Others') AS classification,
     SUM(t01.target_value)                  AS trg_value
     FROM mv_tscl_spl_targets t01
-    LEFT OUTER JOIN dist_prod_mapping_temp t03 ON t03.mapping_code::TEXT = t01.item_code::TEXT
+    LEFT OUTER JOIN vw_items_class t03 ON t03.mapping_code::TEXT = t01.item_code::TEXT
     WHERE t01.target_date >= DATE_TRUNC('month', CAST(:endDate AS date))
       AND t01.target_date < DATE_TRUNC('month', CAST(:endDate AS date)) + INTERVAL '1 month'
     ${classification ? `AND t03.classification::text IN (:classification)` : ""}
@@ -105,7 +105,7 @@ WITH stk AS (
     select
         SUM(dsmh.qty * dsmh.trade_price)                                  AS inv_val
     FROM daily_stock_movement_history dsmh
-    LEFT OUTER JOIN dist_prod_mapping_temp  dmpm
+    LEFT OUTER JOIN vw_items_class  dmpm
         ON dmpm.mapping_code::TEXT =
            CASE
                WHEN item_code NOT LIKE 'F%' THEN (dsmh.item_code::int)::TEXT
@@ -126,7 +126,7 @@ filtered_targets AS (
     SELECT
     SUM(t01.target_value)                                        AS trg_value
     FROM mv_tscl_spl_target t01
-    LEFT OUTER JOIN dist_prod_mapping_temp t03 ON t03.mapping_code::TEXT = t01.item_code::TEXT
+    LEFT OUTER JOIN vw_items_class t03 ON t03.mapping_code::TEXT = t01.item_code::TEXT
     WHERE t01.target_date >= DATE_TRUNC('month', CAST(:endDate AS date))
       AND t01.target_date < DATE_TRUNC('month', CAST(:endDate AS date)) + INTERVAL '1 month'
     ${classification ? `AND t03.classification::text IN (:classification)` : ""}

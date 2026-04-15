@@ -16,7 +16,7 @@ router.get("/", async (req, res) => {
     const sql = `
       WITH sale AS (
           SELECT
-              SUM(amount) AS amount,
+              SUM(a.sold_qty * a.efp) AS amount,
               0           AS target_value
           FROM vw_mv_tscl_data_ a
           WHERE a.billing_date BETWEEN :startDate AND :endDate

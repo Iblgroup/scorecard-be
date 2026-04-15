@@ -41,17 +41,6 @@ router.get("/", async (req, res) => {
         FROM sap_tpkg_traw_data sttd
         WHERE sttd.executiondate BETWEEN :startDate AND :endDate
     )
-    ${branch ? `AND sttd.branch_code::text IN (:branch)` : ""}
-    ${sku ? `AND sttd.product::text IN (
-        SELECT sap_mapping_code::text
-        FROM frg_dist_metric_prod_mapping
-        WHERE sap_mapping_code::text IN (:sku)
-    )` : ""}
-    ${classification ? `AND sttd.product::text IN (
-        SELECT sap_mapping_code::text
-        FROM frg_dist_metric_prod_mapping
-        WHERE classification::text IN (:classification)
-    )` : ""}
     --AND sttd.product::text IN (
     --    SELECT sap_mapping_code::text
     --    FROM frg_dist_metric_prod_mapping

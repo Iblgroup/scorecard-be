@@ -22,7 +22,7 @@ router.get("/", async (req, res) => {
         SUM(dsmh.qty * dsmh.trade_price )        AS inv_val,
        	dmpm.mapping_code
     FROM daily_stock_movement_history dsmh
-    LEFT OUTER JOIN dist_prod_mapping_temp dmpm
+    LEFT OUTER JOIN vw_items_class dmpm
         ON dmpm.mapping_code::TEXT =
            CASE
                WHEN dsmh.item_code NOT LIKE 'F%' THEN (dsmh.item_code::bigint)::TEXT
@@ -50,7 +50,7 @@ filtered_targets AS (
         t03."PRD",                              -- ✅ bring PRD here for correct join
         SUM(t01.target_value)                   AS trg_value
     FROM mv_tscl_spl_target t01
-    LEFT OUTER JOIN dist_prod_mapping_temp t03 ON t03.mapping_code::TEXT = t01.item_code::TEXT
+    LEFT OUTER JOIN vw_items_class t03 ON t03.mapping_code::TEXT = t01.item_code::TEXT
     WHERE DATE_TRUNC('month', t01.target_date) = DATE_TRUNC('month', CAST(:endDate AS date))
     ${classification ? `AND t03.classification::text IN (:classification)` : ""}
     ${sku ? `AND t03.mapping_code::text IN (:sku)` : ""}

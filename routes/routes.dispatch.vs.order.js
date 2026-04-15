@@ -27,9 +27,6 @@ router.get("/", async (req, res) => {
     WHERE
     t02.classification IN ('A', 'B', 'C') AND
     t01.actual_gm_date BETWEEN :startDate AND :endDate
-    ${classification ? `AND t02.classification::text IN (:classification)` : ""}
-    ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
-    ${branch ? `AND t01.branch_code::text IN (:branch)` : ""}
     GROUP BY t01.material_name;
     `;
 
