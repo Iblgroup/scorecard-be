@@ -37,9 +37,7 @@ router.get("/branches", async (req, res) => {
   try {
     const { classification, sku } = req.query;
     const sql = `
-      select distinct 
-      branch_id,branch_desc
-      from sap_locations where branch_id like '80%';
+      select distinct sil.sale_loc ,sil.sale_loc_desc  from sales_inv_locations sil ;
     `;
     const replacements = {};
     if (classification) replacements.classification = Array.isArray(classification) ? classification : [classification];

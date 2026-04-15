@@ -28,17 +28,24 @@ WITH stk AS (
     WHERE dsmh.stock_opening_date = CAST(:endDate AS date)  --agr 1 say 13 ho tou sirf 13 ki uthae
     AND dsmh.busline_code IN ('P07','P08','P12')
     AND dsmh.subinventory_code LIKE '80%'
+    ${classification ? `AND dmpm.classification::text IN (:classification)` : ""}
+    ${sku ? `AND dmpm.mapping_code::text IN (:sku)` : ""}
+    ${branch ? `AND sil.inv_sloc::text IN (:branch)` : ""}
     AND qty <> 0
     GROUP BY dmpm.classification
 ),
 filtered_targets AS (
     SELECT
-        COALESCE(t01.classification, 'Others') AS classification,
-        SUM(t01.target_value)                  AS trg_value
+    COALESCE(t03.classification, 'Others') AS classification,
+    SUM(t01.target_value)                  AS trg_value
     FROM mv_tscl_spl_targets t01
+    LEFT OUTER JOIN dist_prod_mapping_temp t03 ON t03.mapping_code::TEXT = t01.item_code::TEXT
     WHERE t01.target_date >= DATE_TRUNC('month', CAST(:endDate AS date))
       AND t01.target_date < DATE_TRUNC('month', CAST(:endDate AS date)) + INTERVAL '1 month'
-    GROUP BY classification
+    ${classification ? `AND t03.classification::text IN (:classification)` : ""}
+    ${sku ? `AND t03.mapping_code::text IN (:sku)` : ""}
+    ${branch ? `AND t01.loc_code::text IN (:branch)` : ""}
+    GROUP BY COALESCE(t03.classification, 'Others')
 ),
 days_calc AS (
     SELECT EXTRACT(DAY FROM (
@@ -109,7 +116,7 @@ WITH stk AS (
     AND dsmh.busline_code IN ('P07','P08','P12')
     AND dsmh.subinventory_code LIKE '80%'
     ${classification ? `AND dmpm.classification::text IN (:classification)` : ""}
-    ${sku ? `AND dsmh.item_code::text IN (:sku)` : ""}
+    ${sku ? `AND dmpm.mapping_code::text IN (:sku)` : ""}
     ${branch ? `AND sil.inv_sloc::text IN (:branch)` : ""}
 --    AND dsmh.item_code LIKE '%1013000025%'
 --    and sil.inv_sloc = 8028
@@ -119,7 +126,7 @@ filtered_targets AS (
     SELECT
     SUM(t01.target_value)                                        AS trg_value
     FROM mv_tscl_spl_target t01
-    LEFT OUTER JOIN dist_metric_prod_mapping t03 ON t03.sap_code::text = t01.item_code::text
+    LEFT OUTER JOIN dist_prod_mapping_temp t03 ON t03.mapping_code::TEXT = t01.item_code::TEXT
     WHERE t01.target_date >= DATE_TRUNC('month', CAST(:endDate AS date))
       AND t01.target_date < DATE_TRUNC('month', CAST(:endDate AS date)) + INTERVAL '1 month'
     ${classification ? `AND t03.classification::text IN (:classification)` : ""}

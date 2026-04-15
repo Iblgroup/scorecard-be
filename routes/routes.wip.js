@@ -23,6 +23,7 @@ router.get("/", async (req, res) => {
           between :startDate and :endDate
           ${classification ? `AND t02.classification::text IN (:classification)` : ""}
           ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
+          ${branch ? `AND t01.branch_code::text IN (:branch)` : ""}
           group by material_description , sap_mapping_code;
     `;
 

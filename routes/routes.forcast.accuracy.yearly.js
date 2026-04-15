@@ -20,6 +20,9 @@ router.get("/", async (req, res) => {
               0           AS target_value
           FROM vw_mv_tscl_data_ a
           WHERE a.billing_date BETWEEN :startDate AND :endDate
+          ${classification ? `AND a.classification::text IN (:classification)` : ""}
+          ${sku ? `AND a.item_code::text IN (:sku)` : ""}
+          ${branch ? `AND a.branch_id::text IN (:branch)` : ""}
           GROUP BY a.classification
           UNION ALL
           SELECT
@@ -27,8 +30,8 @@ router.get("/", async (req, res) => {
               SUM(value)   AS target_value
           FROM mv_tscl_budget b
           WHERE b.target_date::date BETWEEN :startDate AND :endDate
-              and COALESCE(b.classification, 'Others')  = COALESCE(b.classification, 'Others')  
-        and  b.item_code = b.item_code
+          ${classification ? `AND b.classification::text IN (:classification)` : ""}
+          ${sku ? `AND b.item_code::text IN (:sku)` : ""}
       )
       SELECT
           SUM(amount)                                 AS amount,

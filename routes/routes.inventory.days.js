@@ -53,7 +53,7 @@ filtered_targets AS (
     LEFT OUTER JOIN dist_prod_mapping_temp t03 ON t03.mapping_code::TEXT = t01.item_code::TEXT
     WHERE DATE_TRUNC('month', t01.target_date) = DATE_TRUNC('month', CAST(:endDate AS date))
     ${classification ? `AND t03.classification::text IN (:classification)` : ""}
-    ${sku ? `AND t03.mapping_code::text IN (:sku)` : ""}
+    ${sku ? `AND t01.item_code::text IN (:sku)` : ""}
     ${branch ? `AND t01.loc_code::text IN (:branch)` : ""}
     GROUP BY t01.loc_code, t03.classification, t03.mapping_code, t03."PRD"
 ),

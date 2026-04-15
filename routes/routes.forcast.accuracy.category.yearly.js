@@ -23,6 +23,9 @@ router.get("/", async (req, res) => {
     FROM vw_mv_tscl_data_ a
     WHERE a.billing_date >= DATE_TRUNC('month', :endDate::date) - INTERVAL '2 months'
       AND a.billing_date < :endDate::date + INTERVAL '1 day'
+      ${classification ? `AND a.classification::text IN (:classification)` : ""}
+      ${sku ? `AND a.item_code::text IN (:sku)` : ""}
+      ${branch ? `AND a.branch_id::text IN (:branch)` : ""}
     GROUP BY a.classification, DATE_TRUNC('month', a.billing_date)
     UNION ALL
     SELECT
@@ -34,8 +37,8 @@ router.get("/", async (req, res) => {
     FROM mv_tscl_budget b
     WHERE b.target_date::date >= DATE_TRUNC('month', :endDate::date) - INTERVAL '2 months'
       AND b.target_date::date < :endDate::date + INTERVAL '1 day'
-        and COALESCE(b.classification, 'Others')  = COALESCE(b.classification, 'Others')  
-	 and  b.item_code = b.item_code
+        ${classification ? `AND b.classification::text IN (:classification)` : ""}
+        ${sku ? `AND b.item_code::text IN (:sku)` : ""}
     --    AND b.item_code  = '1013000071'
     --    AND b.loc_code   = '8001'
     GROUP BY COALESCE(b.classification, 'Others'), DATE_TRUNC('month', b.target_date::date)

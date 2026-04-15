@@ -23,6 +23,9 @@ router.get("/", async (req, res) => {
           SUM(amount) AS amount,0 target_value
       FROM vw_mv_tscl_data_ a
       WHERE a.billing_date BETWEEN :startDate AND :endDate
+      ${classification ? `AND a.classification::text IN (:classification)` : ""}
+      ${sku ? `AND a.item_code::text IN (:sku)` : ""}
+      ${branch ? `AND a.branch_id::text IN (:branch)` : ""}
       and a.classification = a.classification and
       a.branch_id = a.branch_id and  item_code = item_code
       group by a.classification

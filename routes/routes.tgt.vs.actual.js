@@ -28,6 +28,9 @@ WITH stk AS (
     WHERE dsmh.stock_opening_date = CAST(:endDate AS date)
     AND dsmh.busline_code IN ('P07','P08','P12')
     AND dsmh.subinventory_code LIKE '80%'
+    ${classification ? `AND dmpm.classification::text IN (:classification)` : ""}
+    ${sku ? `AND dsmh.item_code::text IN (:sku)` : ""}
+    ${branch ? `AND sil.inv_sloc::text IN (:branch)` : ""}
 --    AND dsmh.item_code LIKE '%1013000025%'
 --    and sil.inv_sloc = 8028
     AND qty <> 0
@@ -41,6 +44,9 @@ filtered_targets AS (
     LEFT OUTER JOIN dist_metric_prod_mapping t03 ON t03.sap_code::text = t01.item_code::text
     WHERE t01.target_date >= DATE_TRUNC('month', CAST(:endDate AS date))
       AND t01.target_date < DATE_TRUNC('month', CAST(:endDate AS date)) + INTERVAL '1 month'
+    ${classification ? `AND t03.classification::text IN (:classification)` : ""}
+    ${sku ? `AND t01.item_code::text IN (:sku)` : ""}
+    ${branch ? `AND t01.loc_code::text IN (:branch)` : ""}
 --    and t03.sap_code = '1013000025'
 --    AND t01.loc_code = '8028'
     group by  t03.classification

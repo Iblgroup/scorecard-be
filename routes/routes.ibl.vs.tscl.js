@@ -20,6 +20,9 @@ WITH ibl_target AS (
         SUM(target_value)              AS target_value
     FROM mv_tscl_spl_targets b
      WHERE b.target_date::date BETWEEN :startDate AND :endDate
+    ${classification ? `AND b.classification::text IN (:classification)` : ""}
+    ${sku ? `AND b.item_code::text IN (:sku)` : ""}
+    ${branch ? `AND b.loc_code::text IN (:branch)` : ""}
     and COALESCE(b.classification, 'Others')  = COALESCE(b.classification, 'Others')  
 	and b.loc_code  = b.loc_code and  b.item_code = b.item_code
     GROUP BY COALESCE(b.classification, 'Others')
@@ -30,6 +33,9 @@ tscl_target AS (
         SUM(value)                           AS target_value
     FROM mv_tscl_budget b
     WHERE b.target_date::date BETWEEN :startDate AND :endDate
+       ${classification ? `AND b.classification::text IN (:classification)` : ""}
+       ${sku ? `AND b.item_code::text IN (:sku)` : ""}
+       ${branch ? `AND b.loc_code::text IN (:branch)` : ""}
        and COALESCE(b.classification, 'Others')  = COALESCE(b.classification, 'Others')  
 	 and  b.item_code = b.item_code
     GROUP BY COALESCE(b.classification, 'Others')
