@@ -38,7 +38,7 @@ router.get("/", async (req, res) => {
     AND dsmh.busline_code IN ('P07','P08','P12')
     AND dsmh.subinventory_code LIKE '80%'
     ${classification ? `AND dmpm.classification::text IN (:classification)` : ""}
-    ${sku ? `AND dsmh.item_code::text IN (:sku)` : ""}
+    ${sku ? `AND dmpm.mapping_code::text IN (:sku)` : ""}
     ${branch ? `AND sil.inv_sloc::text IN (:branch)` : ""}
     GROUP BY sil.inv_sloc, dmpm.classification, dmpm."PRD",dmpm.mapping_code
 ),
@@ -53,7 +53,7 @@ filtered_targets AS (
     LEFT OUTER JOIN dist_prod_mapping_temp t03 ON t03.mapping_code::TEXT = t01.item_code::TEXT
     WHERE DATE_TRUNC('month', t01.target_date) = DATE_TRUNC('month', CAST(:endDate AS date))
     ${classification ? `AND t03.classification::text IN (:classification)` : ""}
-    ${sku ? `AND t01.item_code::text IN (:sku)` : ""}
+    ${sku ? `AND t03.mapping_code::text IN (:sku)` : ""}
     ${branch ? `AND t01.loc_code::text IN (:branch)` : ""}
     GROUP BY t01.loc_code, t03.classification, t03.mapping_code, t03."PRD"
 ),

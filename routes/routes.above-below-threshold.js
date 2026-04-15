@@ -36,7 +36,7 @@ router.get("/", async (req, res) => {
         AND dsmh.busline_code IN ('P07','P08','P12')
         AND dsmh.subinventory_code LIKE '80%'
         ${classification ? `AND dmpm.classification::text IN (:classification)` : ""}
-        ${sku ? `AND dsmh.item_code::text IN (:sku)` : ""}
+        ${sku ? `AND dmpm.mapping_code::text IN (:sku)` : ""}
         ${branch ? `AND dsmh.subinventory_code::text IN (:branch)` : ""}
         --dsmh.subinventory_code = '8006'
         GROUP BY TRIM(dmpm.mapping_code)
@@ -49,7 +49,7 @@ router.get("/", async (req, res) => {
         ON TRIM(t03.mapping_code)=TRIM(t01.item_code)
         WHERE DATE_TRUNC('month',t01.target_date)=DATE_TRUNC('month',CAST(:endDate AS date))
         ${classification ? `AND t03.classification::text IN (:classification)` : ""}
-        ${sku ? `AND t01.item_code::text IN (:sku)` : ""}
+        ${sku ? `AND t03.mapping_code::text IN (:sku)` : ""}
         ${branch ? `AND t01.loc_code::text IN (:branch)` : ""}
         --and t01.loc_code = '8006'
         GROUP BY TRIM(t03.mapping_code)

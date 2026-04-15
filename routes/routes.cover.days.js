@@ -16,7 +16,7 @@ router.get("/", async (req, res) => {
 WITH stk AS (
     SELECT
         COALESCE(dmpm.classification, 'Others') AS classification,
-        SUM(dsmh.qty * dsmh.item_cost) AS inv_val
+        SUM(dsmh.qty * dsmh.trade_price) AS inv_val
     FROM daily_stock_movement_history dsmh
     LEFT OUTER JOIN dist_prod_mapping_temp  dmpm
         ON dmpm.mapping_code::TEXT =
@@ -103,7 +103,7 @@ router.get("/total", async (req, res) => {
     const sql = `
 WITH stk AS (
     select
-        SUM(dsmh.qty * dsmh.item_cost)                                  AS inv_val
+        SUM(dsmh.qty * dsmh.trade_price)                                  AS inv_val
     FROM daily_stock_movement_history dsmh
     LEFT OUTER JOIN dist_prod_mapping_temp  dmpm
         ON dmpm.mapping_code::TEXT =
