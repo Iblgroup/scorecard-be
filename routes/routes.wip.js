@@ -2,7 +2,6 @@ import express from "express";
 import db from "../models/index.js";
 
 const router = express.Router();
-// ${branch ? `AND t01.branch_code::text IN (SELECT branch_code FROM locations WHERE branch_code IN (:branch))` : ""}
 router.get("/", async (req, res) => {
   try {
     const {
@@ -14,17 +13,18 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     const sql = `
-        select t01.material_description
-          as "item desc" ,sum(t01.total_value) as "Wip_total" from sap_wip_data t01
-          left JOIN frg_dist_metric_prod_mapping t02
-              ON t02.sap_mapping_code::text = t01.material
-          where
-          t01.record_created_date
-          between :startDate and :endDate
-          ${classification ? `AND t02.classification::text IN (:classification)` : ""}
-          ${sku ? `AND t02.sap_mapping_code::text IN (:sku)` : ""}
-          ${branch ? `AND t01.branch_code::text IN (:branch)` : ""}
-          group by material_description , sap_mapping_code;
+      SELECT t02."PRD" AS "item desc", SUM(t01.wip_value) AS "Wip_total"
+      FROM sap_wip_data t01
+      LEFT OUTER JOIN vw_items_class t02 ON t02.mapping_code::TEXT = t01.item_code::TEXT
+      WHERE t01.record_created_date = (
+          SELECT MAX(d.record_created_date)
+          FROM sap_wip_data d
+          WHERE d.record_created_date::date BETWEEN :startDate AND :endDate
+      )
+      ${classification ? `AND t02.classification::text IN (:classification)` : ""}
+      ${sku ? `AND t02.mapping_code::text IN (:sku)` : ""}
+      GROUP BY t02."PRD"
+      ORDER BY t02."PRD";
     `;
 
     const replacements = { startDate, endDate };

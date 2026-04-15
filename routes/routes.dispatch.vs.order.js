@@ -14,20 +14,21 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     const sql = `
-    SELECT
-        t01.material_name,
-        SUM(t01.so_quantity) AS total_order_qty,
-        SUM(t01.delivery_quantity) AS total_delivery_qty,
-        ROUND(
-            SUM(t01.delivery_quantity)::numeric /
-            NULLIF(SUM(t01.so_quantity)::numeric, 0) * 100, 2) AS delivery_pct
-    FROM dispatch_vs_order t01
-    INNER JOIN dist_metric_prod_mapping t02
-        ON t02.sap_mapping_code::text = t01.material_no::text
-    WHERE
-    t02.classification IN ('A', 'B', 'C') AND
-    t01.actual_gm_date BETWEEN :startDate AND :endDate
-    GROUP BY t01.material_name;
+      SELECT
+      t01.material_name,
+      SUM(t01.so_quantity)    AS total_order_qty,
+      SUM(t01.deliverd_qty)   AS total_delivery_qty,
+      ROUND(
+          SUM(t01.deliverd_qty)::numeric /
+          NULLIF(SUM(t01.so_quantity)::numeric, 0) * 100, 2
+      ) AS delivery_pct
+      FROM vw_dispatch_vs_orders t01
+      INNER JOIN vw_items_class t02
+          ON t02.mapping_code::text = t01.material_no::text
+      WHERE t01.actual_gm_date BETWEEN :startDate AND :endDate
+      ${classification ? `AND t02.classification::text IN (:classification)` : ""}
+      ${sku ? `AND t02.mapping_code::text IN (:sku)` : ""}
+      GROUP BY t01.material_name;
     `;
 
     const replacements = { startDate, endDate };
