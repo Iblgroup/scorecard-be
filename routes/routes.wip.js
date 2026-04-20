@@ -13,18 +13,19 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     const sql = `
-      SELECT t02."PRD" AS "item desc", SUM(t01.wip_value) AS "Wip_total"
-      FROM sap_wip_data t01
-      LEFT OUTER JOIN vw_items_class t02 ON t02.mapping_code::TEXT = t01.item_code::TEXT
+    select  t01.material_type_description ,t02."PRD" as "Material Name",sum(wip_value) as "WIP Value" , sum(t01.wip )
+      as "Quantity" from sap_wip_data t01
+      left outer join vw_items_class t02
+      on t01.item_code = t02.mapping_code
       WHERE t01.record_created_date = (
-          SELECT MAX(d.record_created_date)
-          FROM sap_wip_data d
-          WHERE d.record_created_date::date BETWEEN :startDate AND :endDate
-      )
+              SELECT MAX(t01.record_created_date) t01
+              FROM sap_wip_data t01
+              WHERE t01.record_created_date::date BETWEEN :startDate AND :endDate
+          )
+      and t01.item_code = t01.item_code and t02.classification = t02.classification
       ${classification ? `AND t02.classification::text IN (:classification)` : ""}
       ${sku ? `AND t02.mapping_code::text IN (:sku)` : ""}
-      GROUP BY t02."PRD"
-      ORDER BY t02."PRD";
+      group by t02."PRD",t01.material_type_description;
     `;
 
     const replacements = { startDate, endDate };

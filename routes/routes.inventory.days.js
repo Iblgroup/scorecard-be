@@ -29,10 +29,10 @@ router.get("/", async (req, res) => {
                ELSE dsmh.item_code
            END
     LEFT OUTER JOIN sales_inv_locations sil ON sil.inv_sloc::TEXT = dsmh.subinventory_code
-    WHERE dsmh.stock_opening_date = (
-        SELECT MAX(stock_opening_date)          -- ✅ dynamic latest date
+    WHERE dsmh.stock_closing_date = (
+        SELECT MAX(stock_closing_date)          -- ✅ dynamic latest date
         FROM daily_stock_movement_history d
-       WHERE d.stock_opening_date BETWEEN :startDate AND :endDate  -- dates separated
+       WHERE d.stock_closing_date BETWEEN :startDate AND :endDate  -- dates separated
 		AND d.busline_code IN ('P07','P08','P12')
     )
     AND dsmh.busline_code IN ('P07','P08','P12')

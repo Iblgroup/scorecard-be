@@ -17,9 +17,8 @@ router.get("/", async (req, res) => {
       WITH sku_base AS (
       SELECT DISTINCT (mapping_code) AS mapping_code, classification
       FROM vw_items_class
-      WHERE classification IN ('A','B','C')
+      WHERE 1=1
       ${classification ? `AND classification::text IN (:classification)` : ""}
-      ${sku ? `AND mapping_code::text IN (:sku)` : ""}
       ),
       inv_value AS
       (
@@ -34,15 +33,14 @@ router.get("/", async (req, res) => {
                     ELSE dsmh.item_code
                 END
           LEFT OUTER JOIN sales_inv_locations sil ON sil.inv_sloc::TEXT = dsmh.subinventory_code
-          WHERE dsmh.stock_opening_date = (
-              SELECT MAX(stock_opening_date)
+          WHERE dsmh.stock_closing_date = (
+              SELECT MAX(stock_closing_date)
               FROM daily_stock_movement_history d
-              WHERE d.stock_opening_date BETWEEN :startDate AND :endDate
+              WHERE d.stock_closing_date BETWEEN :startDate AND :endDate
               AND d.busline_code IN ('P07','P08','P12')
           )
           AND dsmh.busline_code IN ('P07','P08','P12')
           AND dsmh.subinventory_code LIKE '80%'
-          ${classification ? `AND dmpm.classification::text IN (:classification)` : ""}
         ${sku ? `AND dmpm.mapping_code::text IN (:sku)` : ""}
         ${branch ? `AND dsmh.subinventory_code::text IN (:branch)` : ""}
           GROUP BY  dmpm.mapping_code
@@ -54,7 +52,6 @@ router.get("/", async (req, res) => {
       LEFT JOIN vw_items_class t03
       ON t03.mapping_code::text= t01.item_code::text
    WHERE DATE_TRUNC('month',t01.target_date)=DATE_TRUNC('month',CAST(:endDate AS date))
-      ${classification ? `AND t03.classification::text IN (:classification)` : ""}
         ${sku ? `AND t03.mapping_code::text IN (:sku)` : ""}
         ${branch ? `AND t01.loc_code::text IN (:branch)` : ""}
       --and t01.loc_code = '8006'

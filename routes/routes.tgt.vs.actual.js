@@ -6,6 +6,7 @@ const router = express.Router();
 router.get("/", async (req, res) => {
   try {
     const {
+      startDate,
       endDate,
       classification,
       sku,
@@ -25,7 +26,12 @@ WITH stk AS (
                ELSE dsmh.item_code
            END
     LEFT OUTER JOIN sales_inv_locations sil ON sil.inv_sloc::TEXT = subinventory_code
-    WHERE dsmh.stock_opening_date = CAST(:endDate AS date)
+    WHERE dsmh.stock_closing_date = (
+              SELECT MAX(stock_closing_date)
+              FROM daily_stock_movement_history d
+              WHERE d.stock_closing_date BETWEEN :startDate AND :endDate
+              AND d.busline_code IN ('P07','P08','P12')
+          )
     AND dsmh.busline_code IN ('P07','P08','P12')
     AND dsmh.subinventory_code LIKE '80%'
     ${classification ? `AND dmpm.classification::text IN (:classification)` : ""}
@@ -80,7 +86,7 @@ WHERE ft.classification IN ('A','B','C')
 ORDER BY ft.classification;
     `;
 
-    const replacements = { endDate };
+    const replacements = { startDate, endDate };
     if (branch) replacements.branch = Array.isArray(branch) ? branch : [branch];
     if (classification) replacements.classification = Array.isArray(classification) ? classification : [classification];
     if (sku) replacements.sku = Array.isArray(sku) ? sku : [sku];

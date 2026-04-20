@@ -37,7 +37,7 @@ router.get("/branches", async (req, res) => {
   try {
     const { classification, sku } = req.query;
     const sql = `
-      select distinct sil.sale_loc ,sil.sale_loc_desc  from sales_inv_locations sil ;
+      select * from mv_branch_locations;
     `;
     const replacements = {};
     if (classification) replacements.classification = Array.isArray(classification) ? classification : [classification];

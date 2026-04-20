@@ -16,42 +16,59 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     const sql = `
-    SELECT
-        sttd.materialname,
-        sttd.producttype ,
-        SUM(
-            sttd.valuatedgrblocked        +
-            sttd.valueunrestricted        +
-            sttd.valuequalityinspection   +
-            sttd.valuereturns             +
-            sttd.valuestktransferstloc    +
-            sttd.valuestocktransferplant  +
-            sttd.valuestockintransit      +
-            sttd.valueblocked             +
-            sttd.valuerestricted          +
-            sttd.valuetiedempties         +
-            sttd.valuevaluatedgrblocked
-        )                                                                   AS total_value,
-        SUM(sttd.valuestktransferstloc)                                     AS storage_location,
-        SUM(sttd.valuerestricted)                                           AS restricted,
-        SUM(sttd.valueunrestricted)                                         AS unrestricted
+SELECT
+    sttd.materialname,
+    sttd.producttype,
+    sttd.plant,
+    sttd.storagelocation ,
+    SUM(sttd.valuatedgrblocked)         AS gr_blocked_val,
+    SUM(sttd.valueunrestricted)         AS unrestricted_val,
+    SUM(sttd.valuequalityinspection)    AS quality_inspection_val,
+    SUM(sttd.valuereturns)              AS returns_val,
+    SUM(sttd.valuestktransferstloc)     AS storage_location_val,
+    SUM(sttd.valuestocktransferplant)   AS stock_transfer_plant_val,
+    SUM(sttd.valuestockintransit)       AS stock_in_transit_val,
+    SUM(sttd.valueblocked)              AS blocked_val,
+    SUM(sttd.valuerestricted)           AS restricted_val,
+    SUM(sttd.valuetiedempties)          AS tied_empties_val,
+--    SUM(sttd.valuevaluatedgrblocked)    AS valuated_gr_blocked,
+    SUM(
+        sttd.valuatedgrblocked        +
+        sttd.valueunrestricted        +
+        sttd.valuequalityinspection   +
+        sttd.valuereturns             +
+        sttd.valuestktransferstloc    +
+        sttd.valuestocktransferplant  +
+        sttd.valuestockintransit      +
+        sttd.valueblocked             +
+        sttd.valuerestricted          +
+        sttd.valuetiedempties         
+    ) AS total_val,
+    sum(sttd.unrestricted ) as unrestricted_qty,
+    sum(sttd.qualityinspection ) as qualityinspection_qty,
+    sum(sttd."returns" ) as return_qty,
+    sum(sttd.stocktransferstoragelocation ) as stocktransferstoragelocation_qty,
+    sum(sttd.stocktransferplant  ) as stocktransferplant_qty,
+    sum(sttd.stockintransit ) as stockintransit_qty,
+    sum(sttd."blocked" ) as blocked_qty,
+    sum(sttd.restricted ) as restricted_qty,
+    sum(sttd.tiedempties ) as tiedempties_qty,
+    sum(sttd.unrestricted +
+    		sttd.qualityinspection +
+    		sttd."returns"+
+    		sttd.stocktransferstoragelocation +
+    		sttd.stocktransferplant +
+    		sttd."blocked" +
+    		sttd.restricted +
+    		sttd.tiedempties
+    ) as total_qty
+FROM sap_tpkg_traw_data sttd
+WHERE sttd.executiondate = (
+    SELECT MAX(sttd.executiondate)
     FROM sap_tpkg_traw_data sttd
-    WHERE sttd.executiondate = (
-        SELECT MAX(sttd.executiondate)
-        FROM sap_tpkg_traw_data sttd
-        WHERE sttd.executiondate BETWEEN :startDate AND :endDate
-    )
-    --AND sttd.product::text IN (
-    --    SELECT sap_mapping_code::text
-    --    FROM frg_dist_metric_prod_mapping
-    --    WHERE sap_mapping_code::text IN ('1019001615')                    -- SKU filter
-    --)
-    --AND sttd.product::text IN (
-    --    SELECT sap_mapping_code::text
-    --    FROM frg_dist_metric_prod_mapping
-    --    WHERE classification::text IN ('A', 'B', 'C')                    -- Classification filter
-    --)
-    GROUP BY sttd.materialname,sttd.producttype;
+    WHERE sttd.executiondate BETWEEN '2026-04-01' AND '2026-04-15'
+)
+GROUP BY sttd.materialname, sttd.producttype, sttd.plant, sttd.storagelocation;
     `;
 
     const replacements = {};
