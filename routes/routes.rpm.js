@@ -19,8 +19,10 @@ router.get("/", async (req, res) => {
 SELECT
     sttd.materialname,
     sttd.producttype,
-    sttd.plant,
+        sttd.plant,
     sttd.storagelocation ,
+    COALESCE(sttd.storagelocationname, 'NA') AS storagelocationname,
+    sttd.plantname,
     SUM(sttd.valuatedgrblocked)         AS gr_blocked_val,
     SUM(sttd.valueunrestricted)         AS unrestricted_val,
     SUM(sttd.valuequalityinspection)    AS quality_inspection_val,
@@ -66,9 +68,9 @@ FROM sap_tpkg_traw_data sttd
 WHERE sttd.executiondate = (
     SELECT MAX(sttd.executiondate)
     FROM sap_tpkg_traw_data sttd
-    WHERE sttd.executiondate BETWEEN '2026-04-01' AND '2026-04-15'
+    WHERE sttd.executiondate BETWEEN :startDate AND :endDate
 )
-GROUP BY sttd.materialname, sttd.producttype, sttd.plant, sttd.storagelocation;
+GROUP BY sttd.materialname, sttd.producttype,sttd.plant, sttd.storagelocation ,  COALESCE(sttd.storagelocationname, 'NA'), sttd.plantname
     `;
 
     const replacements = {};
