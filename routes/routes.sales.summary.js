@@ -16,7 +16,7 @@ router.get("/", async (req, res) => {
     const sql = `
       with sale as (
       select
-        count(distinct a.item_code) sku,
+         a.item_code,
         a.classification ,
       --    a.data_flag,billing_date, item_code,
       --    a.branch_id,
@@ -28,17 +28,18 @@ router.get("/", async (req, res) => {
       ${branch ? `AND a.branch_id::text IN (:branch)` : ""}
       and a.classification = a.classification and
       a.branch_id = a.branch_id and  item_code = item_code
-      group by a.classification
+      group by a.classification,a.item_code
+      HAVING SUM(amount) != 0
       --    AND a.item_code = '1013000071'
       --    AND a.branch_id = '8001'
       --    AND a.data_flag = 'Secondary Sales'
       )
       select
       a.classification,
-      a.sku
+      COUNT(DISTINCT a.item_code) sku
       ,sum(amount)amount
       from sale a
-      group by a.classification,a.sku
+      group by a.classification
       ;
     `;
 
