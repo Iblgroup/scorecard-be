@@ -40,7 +40,7 @@ router.get("/", async (req, res) => {
               AND d.busline_code IN ('P07','P08','P12')
           )
           AND dsmh.busline_code IN ('P07','P08','P12')
-          AND dsmh.subinventory_code LIKE '80%'
+          AND (dsmh.subinventory_code LIKE '80%' or dsmh.subinventory_code = '8206' or  dsmh.subinventory_code = '8210')
         ${sku ? `AND dmpm.mapping_code::text IN (:sku)` : ""}
         ${branch ? `AND dsmh.subinventory_code::text IN (:branch)` : ""}
           GROUP BY  dmpm.mapping_code
