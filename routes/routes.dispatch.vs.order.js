@@ -16,6 +16,7 @@ router.get("/", async (req, res) => {
     const sql = `
       SELECT
       t01.material_name,
+      channel_type,
       SUM(t01.so_quantity)    AS total_order_qty,
       SUM(t01.deliverd_qty)   AS total_delivery_qty,
       ROUND(
@@ -23,12 +24,15 @@ router.get("/", async (req, res) => {
           NULLIF(SUM(t01.so_quantity)::numeric, 0) * 100, 2
       ) AS delivery_pct
       FROM vw_dispatch_vs_orders t01
-      INNER JOIN vw_items_class t02
+      left JOIN vw_items_class t02
           ON t02.mapping_code::text = t01.material_no::text
-      WHERE t01.actual_gm_date BETWEEN :startDate AND :endDate
-      ${classification ? `AND t02.classification::text IN (:classification)` : ""}
-      ${sku ? `AND t02.mapping_code::text IN (:sku)` : ""}
-      GROUP BY t01.material_name;
+      WHERE
+          COALESCE(t02.classification, 'Others') IS NOT NULL
+          AND t01.actual_gm_date BETWEEN :startDate AND :endDate
+      -- AND t02.mapping_code = ''
+            ${classification ? `AND t02.classification::text IN (:classification)` : ""}
+            ${sku ? `AND t02.mapping_code::text IN (:sku)` : ""}
+      GROUP BY t01.material_name,channel_type;
     `;
 
     const replacements = { startDate, endDate };

@@ -13,7 +13,10 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     const sql = `
-    select  t01.material_type_description ,t02."PRD" as "Material Name",sum(wip_value) as "WIP Value" , sum(t01.wip )
+      select   t01.storage_loc ,t01.storage_loc_desc,t01.plant
+      ,t01.plnt_desc,t01.material_type_description,t02."PRD" as "Material Name",t01.order_number
+      ,t01.item_qty,t01.good_received_qty,sum(wip_value) as "WIP Value"
+      , sum(t01.wip )
       as "Quantity" from sap_wip_data t01
       left outer join vw_items_class t02
       on t01.item_code = t02.mapping_code
@@ -24,8 +27,9 @@ router.get("/", async (req, res) => {
           )
       and t01.item_code = t01.item_code and t02.classification = t02.classification
       ${classification ? `AND t02.classification::text IN (:classification)` : ""}
-      ${sku ? `AND t02.mapping_code::text IN (:sku)` : ""}
-      group by t02."PRD",t01.material_type_description;
+            ${sku ? `AND t02.mapping_code::text IN (:sku)` : ""}
+      group by t02."PRD",t01.material_type_description,t01.storage_loc_desc,
+      t01.plnt_desc,t01.item_qty,t01.good_received_qty,t01.storage_loc,t01.plant,t01.order_number;
     `;
 
     const replacements = { startDate, endDate };
