@@ -108,6 +108,25 @@ router.get("/", async (req, res) => {
   }
 });
 
+router.get("/closing-inv", async (_req, res) => {
+  try {
+    const sql = `select max(dsmh.stock_closing_date) as closing_date FROM daily_stock_movement_history dsmh;`;
+
+    const results = await db.sequelize.query(sql, {
+      type: db.sequelize.QueryTypes.SELECT,
+    });
+    console.log(`Fetched ${results.length} records from cover days`);
+    res.json({ success: true, count: results.length, data: results });
+  } catch (error) {
+    console.error("Error fetching cover days:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching data",
+      error: error.message,
+    });
+  }
+});
+
 router.get("/total", async (req, res) => {
   try {
     const {
