@@ -14,118 +14,138 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     const sql = `
-WITH inv_value AS (
-    SELECT
-        COALESCE(dmpm.classification, 'Others') AS classification,
-        dmpm."PRD",
-        dmpm.mapping_code,
-        sil.inv_sloc                            AS branch_code,
-        REPLACE(sil.inv_sloc_desc, ' SELL', '') AS branch_desc,
-        SUM(dsmh.qty * dsmh.trade_price)        AS inv_val
-    FROM daily_stock_movement_history dsmh
-    LEFT OUTER JOIN vw_items_class dmpm
-        ON dmpm.mapping_code::TEXT =
-           CASE
-               WHEN dsmh.item_code NOT LIKE 'F%' THEN (dsmh.item_code::bigint)::TEXT
-               ELSE dsmh.item_code
-           END
-    LEFT OUTER JOIN sales_inv_locations sil ON sil.inv_sloc::TEXT = dsmh.subinventory_code
-    WHERE dsmh.stock_closing_date = (
-        SELECT MAX(stock_closing_date)
-        FROM daily_stock_movement_history d
-        WHERE d.stock_closing_date BETWEEN :startDate AND :endDate
-        AND d.busline_code IN ('P07','P08','P12')
-    )
-    AND dsmh.busline_code IN ('P07','P08','P12')
-    AND (dsmh.subinventory_code LIKE '80%' or dsmh.subinventory_code = '8206' or  dsmh.subinventory_code = '8210')
-    ${classification ? `AND dmpm.classification::text IN (:classification)` : ""}
-    ${sku ? `AND dmpm.mapping_code::text IN (:sku)` : ""}
-    ${branch ? `AND sil.inv_sloc::text IN (:branch)` : ""}
-    GROUP BY sil.inv_sloc, sil.inv_sloc_desc, dmpm.classification, dmpm."PRD", dmpm.mapping_code
-),
-filtered_targets AS (
-    SELECT
-        t01.loc_code                            AS branch_code,
-        t03.classification,
-        t03.mapping_code,
-        t03."PRD",
-        SUM(t01.target_value)                   AS trg_value
-    FROM mv_tscl_spl_target t01
-    LEFT OUTER JOIN vw_items_class t03 ON t03.mapping_code::TEXT = t01.item_code::TEXT
-    WHERE DATE_TRUNC('month', t01.target_date) = DATE_TRUNC('month', CAST(:endDate AS date))
-    ${classification ? `AND t03.classification::text IN (:classification)` : ""}
-    ${sku ? `AND t03.mapping_code::text IN (:sku)` : ""}
-    ${branch ? `AND t01.loc_code::text IN (:branch)` : ""}
-    GROUP BY t01.loc_code, t03.classification, t03.mapping_code, t03."PRD"
-),
-days_calc AS (
-    SELECT EXTRACT(DAY FROM (
-        DATE_TRUNC('month', CAST(:endDate AS date)) + INTERVAL '1 month - 1 day'
-    ))::int AS total_days_in_month
-),
-aggregated AS (
-    SELECT
-        iv.mapping_code,                        -- ✅ was item_code_clean
-        iv.classification,
-        iv."PRD",                               -- ✅ was item_desc
-        iv.branch_code,
-        iv.branch_desc,                         -- ✅ now exists in inv_value
-        iv.inv_val,
-        ft.trg_value
-    FROM inv_value iv
-    LEFT JOIN filtered_targets ft ON iv.branch_code::TEXT = ft.branch_code::TEXT
-                                  AND iv.classification   = ft.classification
-                                  AND iv."PRD"            = ft."PRD"  -- ✅ fixed join key
-),
-cover_days_detail AS (
-    SELECT
-        a.mapping_code,
-        a.classification,
-        a."PRD",
-        a.branch_code,
-        a.branch_desc,
-        a.inv_val,
-        a.trg_value,
-        ROUND(a.trg_value::numeric / NULLIF(dc.total_days_in_month, 0), 1) AS daily_target,
-        ROUND(
-            CASE
-                WHEN ABS(COALESCE(a.inv_val, 0)) < 0.001 THEN 0
-                ELSE COALESCE(a.inv_val, 0)
-            END::numeric /
-            NULLIF(a.trg_value::numeric / NULLIF(dc.total_days_in_month, 0), 0)
-        , 1) AS cover_days
-    FROM aggregated a
-    CROSS JOIN days_calc dc
-),
-totals AS (
-    SELECT
-        branch_code,
-        branch_desc,
-        classification,
-        COUNT(DISTINCT mapping_code)            AS total_sku,   -- ✅ was item_code_clean
-        COUNT(DISTINCT CASE
-            WHEN classification = 'A' AND COALESCE(cover_days, 0) > 30 AND COALESCE(cover_days, 0) < 9999 THEN mapping_code
-            WHEN classification = 'B' AND COALESCE(cover_days, 0) > 20 AND COALESCE(cover_days, 0) < 9999 THEN mapping_code
-            WHEN classification = 'C' AND COALESCE(cover_days, 0) > 15 AND COALESCE(cover_days, 0) < 9999 THEN mapping_code
-        END)                                    AS sku_above_threshold
-    FROM cover_days_detail
-    GROUP BY branch_code, branch_desc, classification
-)
-SELECT
-    t.branch_desc                               AS branch,
-    MAX(CASE WHEN classification = 'A' THEN
-        ROUND(sku_above_threshold::numeric / NULLIF(total_sku::numeric, 0) * 100, 2)
-    END)                                        AS "SKU-A%",
-    MAX(CASE WHEN classification = 'B' THEN
-        ROUND(sku_above_threshold::numeric / NULLIF(total_sku::numeric, 0) * 100, 2)
-    END)                                        AS "SKU-B%",
-    MAX(CASE WHEN classification = 'C' THEN
-        ROUND(sku_above_threshold::numeric / NULLIF(total_sku::numeric, 0) * 100, 2)
-    END)                                        AS "SKU-C%"
-FROM totals t
-WHERE t.branch_code::TEXT IN ('8006','8018','8019','8023','8028','8029','8035','8044','8046','8056','8059','8070','8072','8085')
-GROUP BY t.branch_code, t.branch_desc
-ORDER BY t.branch_desc;
+        WITH inv_value AS (
+            SELECT
+                COALESCE(dmpm.classification, 'Others') AS classification,
+                MAX(sid.matnr_desc) AS "PRD",
+                (CASE WHEN sid.mapping_code = '' OR sid.mapping_code IS NULL
+                    THEN sid.matnr ELSE sid.mapping_code END) AS mapping_code,
+                sil.inv_sloc                            AS branch_code,
+                REPLACE(sil.inv_sloc_desc, ' SELL', '') AS branch_desc,
+                SUM(dsmh.qty * dsmh.trade_price) AS inv_val
+            FROM daily_stock_movement_history dsmh
+            LEFT OUTER JOIN sap_items_detail sid
+                ON sid.matnr = dsmh.item_code
+            LEFT OUTER JOIN vw_items_class dmpm                  
+                ON dmpm.mapping_code::TEXT =
+                (CASE WHEN sid.mapping_code = '' OR sid.mapping_code IS NULL
+                        THEN sid.matnr ELSE sid.mapping_code END)::TEXT
+            LEFT OUTER JOIN sales_inv_locations sil
+                ON sil.inv_sloc::TEXT = dsmh.subinventory_code
+            WHERE dsmh.stock_opening_date = (
+                SELECT MAX(stock_opening_date)
+                FROM daily_stock_movement_history d
+                WHERE d.stock_opening_date BETWEEN '2026-04-01' AND '2026-04-30'
+                AND d.busline_code IN ('P07','P08','P12')
+            )
+            AND dsmh.busline_code IN ('P07','P08','P12')
+            AND (dsmh.subinventory_code LIKE '80%' OR dsmh.subinventory_code = '8206' OR dsmh.subinventory_code = '8210')
+            ${classification ? `AND dmpm.classification::text IN (:classification)` : ""}
+            ${sku ? `AND dmpm.mapping_code::text IN (:sku)` : ""}
+            ${branch ? `AND sil.inv_sloc::text IN (:branch)` : ""}
+            GROUP BY
+                sil.inv_sloc,
+                dmpm.classification,
+                sil.inv_sloc_desc,
+                (CASE WHEN sid.mapping_code = '' OR sid.mapping_code IS NULL
+                    THEN sid.matnr ELSE sid.mapping_code END)
+        ),
+        filtered_targets AS (
+            SELECT
+                t01.loc_code AS branch_code,
+                COALESCE(t03.classification, 'Others') AS classification,
+                (CASE WHEN sid.mapping_code = '' OR sid.mapping_code IS NULL
+                    THEN sid.matnr ELSE sid.mapping_code END) AS mapping_code,
+                MAX(sid.matnr_desc) AS "PRD",
+                SUM(t01.target_value) AS trg_value
+            FROM mv_tscl_spl_target t01
+            LEFT OUTER JOIN vw_items_class t03
+                ON t03.mapping_code::TEXT = t01.item_code::TEXT
+            LEFT OUTER JOIN sap_items_detail sid
+                ON sid.matnr = t01.item_code
+            WHERE DATE_TRUNC('month', t01.target_date) = DATE_TRUNC('month', :endDate::date)
+            ${classification ? `AND t03.classification::text IN (:classification)` : ""}
+            ${sku ? `AND t03.mapping_code::text IN (:sku)` : ""}
+            ${branch ? `AND t01.loc_code::text IN (:branch)` : ""}
+            GROUP BY
+                t01.loc_code,
+                t03.classification,
+                (CASE WHEN sid.mapping_code = '' OR sid.mapping_code IS NULL
+                    THEN sid.matnr ELSE sid.mapping_code END)
+        ),
+        days_calc AS (
+            SELECT EXTRACT(DAY FROM (
+                DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month - 1 day'
+            ))::int AS total_days_in_month
+        ),
+        aggregated AS (
+            SELECT
+                ft.mapping_code,
+                ft.classification,
+                ft."PRD",
+                ft.branch_code,
+                -- ✅ get branch_desc from sil since ft doesn't have it
+                REPLACE(sil.inv_sloc_desc, ' SELL', '') AS branch_desc,
+                iv.inv_val,
+                ft.trg_value
+            FROM filtered_targets ft
+            -- ✅ flipped to LEFT JOIN from targets side so all target SKUs appear
+            LEFT JOIN inv_value iv
+                ON  iv.branch_code::TEXT  = ft.branch_code::TEXT
+                AND iv.classification     = ft.classification
+                AND iv.mapping_code::TEXT = ft.mapping_code::TEXT
+            LEFT JOIN sales_inv_locations sil
+                ON sil.inv_sloc::TEXT = ft.branch_code::TEXT
+        ),
+        cover_days_detail AS (
+            SELECT
+                a.mapping_code,
+                a.classification,
+                a."PRD",
+                a.branch_code,
+                a.branch_desc,
+                a.inv_val,
+                a.trg_value,
+                ROUND(a.trg_value::numeric / NULLIF(dc.total_days_in_month, 0), 1) AS daily_target,
+                ROUND(
+                    CASE
+                        WHEN ABS(COALESCE(a.inv_val, 0)) < 0.001 THEN 0
+                        ELSE COALESCE(a.inv_val, 0)
+                    END::numeric /
+                    NULLIF(a.trg_value::numeric / NULLIF(dc.total_days_in_month, 0), 0)
+                , 1) AS cover_days
+            FROM aggregated a
+            CROSS JOIN days_calc dc
+        ),
+        totals AS (
+            SELECT
+                branch_code,
+                branch_desc,
+                classification,
+                COUNT(DISTINCT mapping_code) AS total_sku,
+                COUNT(DISTINCT CASE
+                    WHEN classification = 'A' AND COALESCE(cover_days, 0) > 30 AND COALESCE(cover_days, 0) < 9999 THEN mapping_code
+                    WHEN classification = 'B' AND COALESCE(cover_days, 0) > 20 AND COALESCE(cover_days, 0) < 9999 THEN mapping_code
+                    WHEN classification = 'C' AND COALESCE(cover_days, 0) > 15 AND COALESCE(cover_days, 0) < 9999 THEN mapping_code
+                END) AS sku_above_threshold
+            FROM cover_days_detail
+            GROUP BY branch_code, branch_desc, classification
+        )
+        SELECT
+            t.branch_desc                               AS branch,
+            MAX(CASE WHEN classification = 'A' THEN
+                ROUND(sku_above_threshold::numeric / NULLIF(total_sku::numeric, 0) * 100, 2)
+            END)                                        AS "SKU-A%",
+            MAX(CASE WHEN classification = 'B' THEN
+                ROUND(sku_above_threshold::numeric / NULLIF(total_sku::numeric, 0) * 100, 2)
+            END)                                        AS "SKU-B%",
+            MAX(CASE WHEN classification = 'C' THEN
+                ROUND(sku_above_threshold::numeric / NULLIF(total_sku::numeric, 0) * 100, 2)
+            END)                                        AS "SKU-C%"
+        FROM totals t
+        WHERE t.branch_code::TEXT IN ('8006','8018','8019','8023','8028','8029','8035','8044','8046','8056','8059','8070','8072','8085')
+        GROUP BY t.branch_code, t.branch_desc
+        ORDER BY t.branch_desc;
     `;
 
     const replacements = { startDate, endDate };
