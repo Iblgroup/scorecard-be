@@ -12,6 +12,7 @@ router.get("/", async (req, res) => {
       sku,
       branch,
     } = req.query;
+        //   ${classification ? `AND classification::text IN (:classification)` : ""}
 
     const sql = `
       WITH sku_base AS (
@@ -19,8 +20,7 @@ router.get("/", async (req, res) => {
               mapping_code,
               COALESCE(classification, 'Others') AS classification
           FROM vw_items_class
-          WHERE 1=1
-          ${classification ? `AND classification::text IN (:classification)` : ""}
+          where classification in ('A', 'B', 'C')
       ),
       inv_value AS (
           SELECT
@@ -60,7 +60,7 @@ router.get("/", async (req, res) => {
               (CASE WHEN sid.mapping_code = '' OR sid.mapping_code IS NULL  -- ✅ removed loc_code & classification
                     THEN sid.matnr ELSE sid.mapping_code END) AS mapping_code,
               SUM(t01.target_value) AS trg_value                            -- ✅ SUM across ALL branches
-          FROM mv_tscl_spl_target t01
+          FROM mv_tscl_spl_targets t01
           LEFT OUTER JOIN sap_items_detail sid
               ON sid.matnr = t01.item_code
           LEFT OUTER JOIN vw_items_class t03

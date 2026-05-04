@@ -58,7 +58,7 @@ router.get("/", async (req, res) => {
                     THEN sid.matnr ELSE sid.mapping_code END) AS mapping_code,
                 MAX(sid.matnr_desc) AS "PRD",
                 SUM(t01.target_value) AS trg_value
-            FROM mv_tscl_spl_target t01
+            FROM mv_tscl_spl_targets t01
             LEFT OUTER JOIN vw_items_class t03
                 ON t03.mapping_code::TEXT = t01.item_code::TEXT
             LEFT OUTER JOIN sap_items_detail sid

@@ -169,7 +169,7 @@ WITH stk AS (
 filtered_targets AS (
     SELECT
     SUM(t01.target_value)                                        AS trg_value
-    FROM mv_tscl_spl_target t01
+    FROM mv_tscl_spl_targets t01
     LEFT OUTER JOIN vw_items_class t03 ON t03.mapping_code::TEXT = t01.item_code::TEXT
     WHERE t01.target_date >= DATE_TRUNC('month', CAST(:endDate AS date))
       AND t01.target_date < DATE_TRUNC('month', CAST(:endDate AS date)) + INTERVAL '1 month'
