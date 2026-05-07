@@ -16,10 +16,12 @@ router.get("/", async (req, res) => {
     const sql = `
       WITH sale AS (
           SELECT
-              SUM(a.sold_qty * a.efp) AS amount,
+              SUM(a.sold_qty * b."SALE E.F.P") AS amount,
               0           AS target_value
           FROM vw_mv_tscl_data_ a
+          LEFT OUTER JOIN tscl_efp b ON b.item_code = a.item_code
           WHERE a.billing_date BETWEEN :startDate AND :endDate
+          and b.first_date between :startDate AND :endDate
           ${classification ? `AND a.classification::text IN (:classification)` : ""}
           ${sku ? `AND a.item_code::text IN (:sku)` : ""}
           ${branch ? `AND a.branch_id::text IN (:branch)` : ""}

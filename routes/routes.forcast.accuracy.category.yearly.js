@@ -18,11 +18,15 @@ router.get("/", async (req, res) => {
         a.classification,
         DATE_TRUNC('month', a.billing_date) AS month_date,
         TO_CHAR(DATE_TRUNC('month', a.billing_date), 'FMMonth YYYY') AS month,
-        SUM(a.sold_qty * a.efp) AS amount,
+        SUM(a.sold_qty * b."SALE E.F.P") AS amount,
         0           AS target_value
     FROM vw_mv_tscl_data_ a
+    LEFT OUTER JOIN tscl_efp b ON b.item_code = a.item_code
     WHERE a.billing_date >= DATE_TRUNC('month', :endDate::date) - INTERVAL '2 months'
-      AND a.billing_date < :endDate::date + INTERVAL '1 day'
+      AND a.billing_date < DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month'
+      AND b.first_date::date >= DATE_TRUNC('month', :endDate::date) - INTERVAL '2 months'
+      AND b.first_date::date < DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month'
+      AND DATE_TRUNC('month', b.first_date::date) = DATE_TRUNC('month', a.billing_date)
       ${classification ? `AND a.classification::text IN (:classification)` : ""}
       ${sku ? `AND a.item_code::text IN (:sku)` : ""}
       ${branch ? `AND a.branch_id::text IN (:branch)` : ""}
@@ -36,7 +40,7 @@ router.get("/", async (req, res) => {
         SUM(value)   AS target_value
     FROM mv_tscl_budget b
     WHERE b.target_date::date >= DATE_TRUNC('month', :endDate::date) - INTERVAL '2 months'
-      AND b.target_date::date < :endDate::date + INTERVAL '1 day'
+      AND b.target_date::date < DATE_TRUNC('month', :endDate::date) + INTERVAL '1 month'
         ${classification ? `AND b.classification::text IN (:classification)` : ""}
         ${sku ? `AND b.item_code::text IN (:sku)` : ""}
     --    AND b.item_code  = '1013000071'
