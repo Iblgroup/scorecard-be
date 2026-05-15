@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import db from "../models/index.js";
 
 const router = express.Router();
@@ -19,7 +19,7 @@ WITH ibl_target AS (
         COALESCE(b.classification, 'Others') AS classification,
         SUM(target_value)              AS target_value
     FROM mv_tscl_spl_targets b
-     WHERE b.target_date::date BETWEEN :startDate AND :endDate
+     WHERE DATE_TRUNC('month', b.target_date::date) = DATE_TRUNC('month', CAST(:endDate AS date))
     ${classification ? `AND b.classification::text IN (:classification)` : ""}
     ${sku ? `AND b.item_code::text IN (:sku)` : ""}
     ${branch ? `AND b.loc_code::text IN (:branch)` : ""}
@@ -32,7 +32,7 @@ tscl_target AS (
         COALESCE(b.classification, 'Others') AS classification,
         SUM(value)                           AS target_value
     FROM mv_tscl_budget b
-    WHERE b.target_date::date BETWEEN :startDate AND :endDate
+    WHERE DATE_TRUNC('month', b.target_date::date) = DATE_TRUNC('month', CAST(:endDate AS date))
        ${classification ? `AND b.classification::text IN (:classification)` : ""}
        ${sku ? `AND b.item_code::text IN (:sku)` : ""}
        and COALESCE(b.classification, 'Others')  = COALESCE(b.classification, 'Others')  
@@ -93,3 +93,4 @@ FROM combined;
 });
 
 export default router;
+
