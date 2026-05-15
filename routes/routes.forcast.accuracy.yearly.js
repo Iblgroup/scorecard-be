@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import db from "../models/index.js";
 
 const router = express.Router();
@@ -16,12 +16,28 @@ router.get("/", async (req, res) => {
     const sql = `
       WITH sale AS (
           SELECT
-              SUM(a.sold_qty * b."SALE E.F.P") AS amount,
+              SUM(a.sold_qty * COALESCE(b."SALE E.F.P", 0)) AS amount,
               0           AS target_value
           FROM vw_mv_tscl_data_ a
-          LEFT OUTER JOIN tscl_efp b ON b.item_code = a.item_code
+          LEFT JOIN LATERAL (
+              SELECT efp."SALE E.F.P"
+              FROM tscl_efp efp
+              WHERE efp.item_code = a.item_code
+                AND DATE_TRUNC('month', efp.first_date::date) IN (
+                    DATE_TRUNC('month', CAST(:endDate AS date)),
+                    DATE_TRUNC('month', CAST(:endDate AS date) - INTERVAL '1 month')
+                )
+              ORDER BY CASE
+                  WHEN DATE_TRUNC('month', efp.first_date::date) = DATE_TRUNC('month', CAST(:endDate AS date))
+                       AND COALESCE(efp."SALE E.F.P", 0) <> 0 THEN 0
+                  WHEN DATE_TRUNC('month', efp.first_date::date) = DATE_TRUNC('month', CAST(:endDate AS date) - INTERVAL '1 month') THEN 1
+                  WHEN DATE_TRUNC('month', efp.first_date::date) = DATE_TRUNC('month', CAST(:endDate AS date)) THEN 2
+                  ELSE 3
+              END,
+              efp.first_date DESC
+              LIMIT 1
+          ) b ON TRUE
           WHERE a.billing_date BETWEEN :startDate AND :endDate
-          and b.first_date between :startDate AND :endDate
           ${classification ? `AND a.classification::text IN (:classification)` : ""}
           ${sku ? `AND a.item_code::text IN (:sku)` : ""}
           ${branch ? `AND a.branch_id::text IN (:branch)` : ""}
@@ -71,3 +87,5 @@ router.get("/", async (req, res) => {
 });
 
 export default router;
+
+
